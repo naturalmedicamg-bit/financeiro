@@ -1886,7 +1886,7 @@ function buildConfigSubcontasForm() {
     </div>`).join('') + `<div style="font-size:12px;color:var(--fog);margin-top:8px">A soma dos percentuais deve ser 100%.</div>`;
 }
 
-function salvarConfig() {
+async function salvarConfig() {
   const cfg = getSubConfig();
   let total = 0;
   const novo = {};
@@ -1896,9 +1896,69 @@ function salvarConfig() {
     novo[key] = { ...sub, pct };
   });
   if(total !== 100) return toast(`A soma é ${total}%. Precisa ser 100%.`,'error');
+
+  // Salvar novos percentuais
   localStorage.setItem('aera_subcontas', JSON.stringify(novo));
-  toast('Configuração salva! Atualizando dashboard...');
-  // Recarregar dashboard e subcontas com novos percentuais
+
+  toast('Redistribuindo subcontas... aguarde');
+
+  // Buscar todas as receitas lançadas (origem manual ou pdf)
+  const { data: receitas } = await sb.from('transactions')
+    .select('*')
+    .eq('tipo', 'receita')
+    .eq('user_id', USER.id);
+
+  if (receitas && receitas.length > 0) {
+    // Agrupar receitas por descrição + data (cada receita original foi dividida em 5)
+    // Identificar grupos: mesma descricao + data_movimento = mesmo lançamento original
+    const grupos = {};
+    receitas.forEach(r => {
+      const chave = `${r.descricao}__${r.data_movimento}`;
+      if (!grupos[chave]) grupos[chave] = [];
+      grupos[chave].push(r);
+    });
+
+    // Para cada grupo, calcular o valor total original e redistribuir
+    for (const [chave, items] of Object.entries(grupos)) {
+      const valorTotal = items.reduce((s, r) => s + Number(r.valor), 0);
+      const dist = {};
+      let resto = valorTotal;
+      const keys = Object.keys(novo);
+      keys.forEach((k, i) => {
+        if (i === keys.length - 1) {
+          dist[k] = Math.round(resto * 100) / 100;
+        } else {
+          const v = Math.round(valorTotal * (novo[k].pct / 100) * 100) / 100;
+          dist[k] = v;
+          resto -= v;
+        }
+      });
+
+      // Deletar os lançamentos antigos desse grupo
+      const ids = items.map(r => r.id);
+      await sb.from('transactions').delete().in('id', ids);
+
+      // Recriar com novos percentuais
+      const primeiro = items[0];
+      for (const [sub, val] of Object.entries(dist)) {
+        await sb.from('transactions').insert({
+          user_id: USER.id,
+          tipo: 'receita',
+          descricao: primeiro.descricao,
+          valor: val,
+          data_movimento: primeiro.data_movimento,
+          category_id: primeiro.category_id,
+          subconta: sub,
+          origem: primeiro.origem || 'manual'
+        });
+      }
+    }
+
+    toast(`✓ Subcontas redistribuídas! ${Object.keys(grupos).length} receitas recalculadas.`);
+  } else {
+    toast('Percentuais salvos! Novas entradas já usarão os percentuais atualizados.');
+  }
+
   loadDashboard();
   buildConfigSubcontasForm();
 }
