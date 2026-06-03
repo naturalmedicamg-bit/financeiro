@@ -601,6 +601,7 @@ tr:hover td { background: rgba(184,151,58,0.03); }
         <div class="nav-item active" onclick="go('dashboard')"><span class="icon">◈</span> Dashboard</div>
         <div class="nav-item" onclick="go('extrato')"><span class="icon">≡</span> Extrato</div>
         <div class="nav-item" onclick="go('subcontas')"><span class="icon">⊡</span> Subcontas</div>
+        <div class="nav-item" onclick="go('envelopes')"><span class="icon">◑</span> Envelopes</div>
       </div>
 
       <div class="nav-group">
@@ -747,6 +748,38 @@ tr:hover td { background: rgba(184,151,58,0.03); }
       </div>
 
       <div id="subcontas-detalhes"></div>
+    </div>
+
+    <!-- ENVELOPES -->
+    <div class="page" id="page-envelopes">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Envelopes Financeiros</div>
+          <div class="page-sub">Metas mensais por subconta — o dinheiro sabe para onde ir</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="month" id="env-mes" class="form-control" style="width:auto" onchange="loadEnvelopes()">
+          <button class="btn btn-outline btn-sm" onclick="openModal('modal-custo')">+ Custo Estimado</button>
+        </div>
+      </div>
+
+      <!-- Rodas de progresso -->
+      <div id="env-rodas" style="display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-bottom:24px"></div>
+
+      <!-- Resumo inteligente -->
+      <div id="env-resumo" class="card-gold" style="margin-bottom:20px"></div>
+
+      <!-- Custos estimados -->
+      <div class="grid g2">
+        <div class="card">
+          <div style="font-size:12px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:1px;margin-bottom:16px">📌 Custos Fixos</div>
+          <div id="env-fixos"></div>
+        </div>
+        <div class="card">
+          <div style="font-size:12px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:1px;margin-bottom:16px">📊 Custos Variáveis Estimados</div>
+          <div id="env-variaveis"></div>
+        </div>
+      </div>
     </div>
 
     <!-- DRE -->
@@ -1029,6 +1062,48 @@ tr:hover td { background: rgba(184,151,58,0.03); }
   </div>
 </div>
 
+<!-- Modal Custo Estimado -->
+<div class="modal-overlay" id="modal-custo">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Novo Custo Estimado</div>
+      <button class="modal-close" onclick="closeModal('modal-custo')">×</button>
+    </div>
+    <div class="form-group"><label>Nome</label><input type="text" id="ce-nome" class="form-control" placeholder="Ex: Aluguel da Sala, Secretária..."></div>
+    <div class="form-group"><label>Tipo</label>
+      <select id="ce-tipo" class="form-control">
+        <option value="fixo">Fixo (mesmo valor todo mês)</option>
+        <option value="variavel">Variável (estimativa)</option>
+      </select>
+    </div>
+    <div class="form-group"><label>Subconta</label>
+      <select id="ce-subconta" class="form-control">
+        <option value="operacional">Operacional</option>
+        <option value="impostos">Impostos</option>
+        <option value="prolabore">Pró-labore</option>
+        <option value="reserva">Reserva</option>
+        <option value="antecipacao">Antecipação</option>
+      </select>
+    </div>
+    <div class="form-group"><label>Valor Estimado (R$)</label><input type="number" id="ce-valor" class="form-control" step="0.01"></div>
+    <button class="btn btn-gold" onclick="salvarCusto()">Salvar</button>
+  </div>
+</div>
+
+<!-- Modal Meta Subconta -->
+<div class="modal-overlay" id="modal-meta-sub">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="meta-sub-title">Meta da Subconta</div>
+      <button class="modal-close" onclick="closeModal('modal-meta-sub')">×</button>
+    </div>
+    <div class="form-group"><label>Meta Mensal (R$)</label><input type="number" id="ms-valor" class="form-control" step="0.01"></div>
+    <div class="form-group"><label>Acumulado do mês anterior (R$)</label><input type="number" id="ms-acumulado" class="form-control" step="0.01" value="0"></div>
+    <input type="hidden" id="ms-subconta">
+    <button class="btn btn-gold" onclick="salvarMetaSub()">Salvar Meta</button>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script>
@@ -1179,6 +1254,7 @@ function go(page) {
     dashboard: loadDashboard,
     extrato: loadExtrato,
     subcontas: loadSubcontas,
+    envelopes: loadEnvelopes,
     dre: loadDRE,
     receitas: loadReceitas,
     despesas: loadDespesas,
@@ -1969,6 +2045,202 @@ function salvarOpenAI() {
   localStorage.setItem('openai_key', key);
   toast('Chave salva!');
   checkIAWarning();
+}
+
+// ══════════════════════════════
+// ENVELOPES FINANCEIROS
+// ══════════════════════════════
+
+async function loadEnvelopes() {
+  const mes = document.getElementById('env-mes')?.value || mesAtual();
+  if (document.getElementById('env-mes')) document.getElementById('env-mes').value = mes;
+  const [ano, m] = mes.split('-').map(Number);
+  const cfg = getSubConfig();
+
+  // Buscar metas do mês
+  const { data: metas } = await sb.from('subconta_metas')
+    .select('*').eq('mes', m).eq('ano', ano);
+
+  // Buscar receitas do mês distribuídas nas subcontas
+  const { data: trans } = await sb.from('transactions')
+    .select('valor,tipo,subconta')
+    .gte('data_movimento', `${ano}-${String(m).padStart(2,'0')}-01`)
+    .lte('data_movimento', `${ano}-${String(m).padStart(2,'0')}-31`);
+
+  // Calcular saldo por subconta
+  const saldos = {};
+  Object.keys(cfg).forEach(k => saldos[k] = 0);
+  (trans||[]).forEach(t => {
+    if (t.subconta && saldos[t.subconta] !== undefined) {
+      saldos[t.subconta] += t.tipo === 'receita' ? Number(t.valor) : -Number(t.valor);
+    }
+  });
+
+  // Mapear metas
+  const metasMap = {};
+  (metas||[]).forEach(m => metasMap[m.subconta] = m);
+
+  // Buscar custos estimados
+  const { data: custos } = await sb.from('custos_estimados').select('*').eq('ativo', true);
+  const custosFixos = (custos||[]).filter(c=>c.tipo==='fixo');
+  const custosVar   = (custos||[]).filter(c=>c.tipo==='variavel');
+
+  // Calcular meta automática por subconta (soma dos custos)
+  const metasCustos = {};
+  Object.keys(cfg).forEach(k => metasCustos[k] = 0);
+  (custos||[]).forEach(c => {
+    if (c.subconta && metasCustos[c.subconta] !== undefined) {
+      metasCustos[c.subconta] += Number(c.valor);
+    }
+  });
+
+  // Renderizar rodas de progresso SVG
+  const rodas = document.getElementById('env-rodas');
+  const subcontas = Object.entries(cfg);
+  
+  rodas.innerHTML = subcontas.map(([key, sub]) => {
+    const meta = metasMap[key]?.meta_valor || metasCustos[key] || 0;
+    const acumulado = metasMap[key]?.acumulado_anterior || 0;
+    const saldo = Math.max(0, saldos[key] || 0);
+    const total = saldo + acumulado;
+    const pct = meta > 0 ? Math.min(100, Math.round(total / meta * 100)) : 0;
+    const bateu = pct >= 100;
+    
+    // SVG roda
+    const r = 54, circ = 2 * Math.PI * r;
+    const dash = (pct / 100) * circ;
+    const cor = bateu ? '#00A878' : sub.color;
+    
+    return `
+      <div class="card" style="text-align:center;border-color:${bateu?'var(--emerald)':'var(--slate)'};cursor:pointer;transition:all 0.2s" 
+           onclick="abrirMetaSub('${key}','${sub.nome}',${meta},${acumulado})"
+           onmouseover="this.style.borderColor='var(--gold-border)'"
+           onmouseout="this.style.borderColor='${bateu?'var(--emerald)':'var(--slate)'}'">
+        
+        <div style="position:relative;display:inline-block;margin-bottom:12px">
+          <svg width="120" height="120" viewBox="0 0 120 120">
+            <!-- Fundo -->
+            <circle cx="60" cy="60" r="${r}" fill="none" stroke="var(--slate)" stroke-width="8"/>
+            <!-- Progresso -->
+            <circle cx="60" cy="60" r="${r}" fill="none" stroke="${cor}" stroke-width="8"
+              stroke-dasharray="${dash} ${circ}"
+              stroke-dashoffset="${circ * 0.25}"
+              stroke-linecap="round"
+              style="transition:stroke-dasharray 0.8s ease"/>
+            <!-- % no centro -->
+            <text x="60" y="55" text-anchor="middle" fill="${cor}" font-size="20" font-weight="700" font-family="DM Sans">${pct}%</text>
+            <text x="60" y="72" text-anchor="middle" fill="var(--fog)" font-size="10" font-family="DM Sans">${bateu?'✓ META':''}</text>
+          </svg>
+        </div>
+
+        <div style="font-size:18px;margin-bottom:4px">${sub.icon}</div>
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--fog);margin-bottom:6px">${sub.nome}</div>
+        <div style="font-size:18px;font-weight:700;color:${cor}">${fmt(total)}</div>
+        ${meta > 0 ? `<div style="font-size:11px;color:var(--fog);margin-top:3px">meta: ${fmt(meta)}</div>` : `<div style="font-size:11px;color:var(--gold);margin-top:3px">clique p/ definir meta</div>`}
+        ${acumulado > 0 ? `<div style="font-size:10px;color:var(--emerald);margin-top:2px">+ ${fmt(acumulado)} acumulado</div>` : ''}
+        ${bateu ? `<div style="font-size:10px;color:var(--emerald);margin-top:4px;font-weight:700">🎯 Excesso → próxima</div>` : ''}
+      </div>`;
+  }).join('');
+
+  // Resumo inteligente
+  const totalMeta = Object.values(metasCustos).reduce((s,v)=>s+v,0) || Object.values(metasMap).reduce((s,m)=>s+m.meta_valor,0);
+  const totalSaldo = Object.values(saldos).reduce((s,v)=>s+Math.max(0,v),0);
+  const subsBatidas = subcontas.filter(([k])=>{
+    const meta = metasMap[k]?.meta_valor || metasCustos[k] || 0;
+    return meta > 0 && (saldos[k]||0) >= meta;
+  });
+
+  document.getElementById('env-resumo').innerHTML = `
+    <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap">
+      <div style="flex:1;min-width:200px">
+        <div style="font-size:13px;color:var(--fog);margin-bottom:4px">Progresso geral do mês</div>
+        <div style="font-size:28px;font-weight:700;color:var(--gold-light)">${totalMeta>0?Math.min(100,Math.round(totalSaldo/totalMeta*100)):0}%</div>
+        <div style="font-size:13px;color:var(--fog);margin-top:4px">${fmt(totalSaldo)} de ${fmt(totalMeta)} em metas</div>
+      </div>
+      <div style="flex:1;min-width:200px">
+        <div class="progress-wrap" style="height:10px"><div class="progress-bar pb-gold" style="width:${totalMeta>0?Math.min(100,Math.round(totalSaldo/totalMeta*100)):0}%"></div></div>
+        <div style="font-size:12px;color:var(--fog);margin-top:8px">${subsBatidas.length} de ${subcontas.length} subcontas com meta atingida</div>
+      </div>
+      ${subsBatidas.length > 0 ? `
+      <div style="flex:1;min-width:200px">
+        <div style="font-size:12px;font-weight:700;color:var(--emerald);margin-bottom:6px">✓ Metas batidas</div>
+        ${subsBatidas.map(([k])=>`<span class="badge b-green" style="margin:2px">${cfg[k].nome}</span>`).join('')}
+      </div>` : ''}
+    </div>`;
+
+  // Custos fixos
+  document.getElementById('env-fixos').innerHTML = custosFixos.length ? custosFixos.map(c=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--slate)">
+      <div>
+        <div style="font-size:14px;font-weight:500">${c.nome}</div>
+        <div style="font-size:11px;color:var(--fog);margin-top:2px">${cfg[c.subconta]?.nome||c.subconta}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="font-size:15px;font-weight:700;color:var(--red)">-${fmt(c.valor)}</div>
+        <button class="btn btn-danger btn-xs" onclick="deletarCusto('${c.id}')">✕</button>
+      </div>
+    </div>`).join('') : '<div style="color:var(--fog);font-size:13px;padding:12px 0">Nenhum custo fixo cadastrado</div>';
+
+  document.getElementById('env-variaveis').innerHTML = custosVar.length ? custosVar.map(c=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--slate)">
+      <div>
+        <div style="font-size:14px;font-weight:500">${c.nome}</div>
+        <div style="font-size:11px;color:var(--fog);margin-top:2px">${cfg[c.subconta]?.nome||c.subconta} · estimativa</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="font-size:15px;font-weight:700;color:var(--gold)">~${fmt(c.valor)}</div>
+        <button class="btn btn-danger btn-xs" onclick="deletarCusto('${c.id}')">✕</button>
+      </div>
+    </div>`).join('') : '<div style="color:var(--fog);font-size:13px;padding:12px 0">Nenhum custo variável cadastrado</div>';
+}
+
+function abrirMetaSub(subconta, nome, metaAtual, acumulado) {
+  document.getElementById('meta-sub-title').textContent = `Meta — ${nome}`;
+  document.getElementById('ms-subconta').value = subconta;
+  document.getElementById('ms-valor').value = metaAtual || '';
+  document.getElementById('ms-acumulado').value = acumulado || 0;
+  openModal('modal-meta-sub');
+}
+
+async function salvarMetaSub() {
+  const subconta = document.getElementById('ms-subconta').value;
+  const valor = parseFloat(document.getElementById('ms-valor').value) || 0;
+  const acumulado = parseFloat(document.getElementById('ms-acumulado').value) || 0;
+  const mes = document.getElementById('env-mes')?.value || mesAtual();
+  const [ano, m] = mes.split('-').map(Number);
+
+  const { error } = await sb.from('subconta_metas').upsert({
+    user_id: USER.id, subconta, meta_valor: valor,
+    mes: m, ano, acumulado_anterior: acumulado
+  }, { onConflict: 'user_id,subconta,mes,ano' });
+
+  if (error) return toast('Erro: ' + error.message, 'error');
+  toast('Meta salva!');
+  closeModal('modal-meta-sub');
+  loadEnvelopes();
+}
+
+async function salvarCusto() {
+  const nome = document.getElementById('ce-nome').value.trim();
+  const tipo = document.getElementById('ce-tipo').value;
+  const subconta = document.getElementById('ce-subconta').value;
+  const valor = parseFloat(document.getElementById('ce-valor').value);
+  if (!nome || !valor) return toast('Preencha nome e valor', 'error');
+
+  const { error } = await sb.from('custos_estimados').insert({
+    user_id: USER.id, nome, tipo, subconta, valor
+  });
+  if (error) return toast('Erro: ' + error.message, 'error');
+  toast('Custo salvo!');
+  closeModal('modal-custo');
+  loadEnvelopes();
+}
+
+async function deletarCusto(id) {
+  if (!confirm('Excluir este custo?')) return;
+  await sb.from('custos_estimados').delete().eq('id', id);
+  toast('Excluído');
+  loadEnvelopes();
 }
 
 // ══════════════════════════════
