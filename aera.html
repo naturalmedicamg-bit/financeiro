@@ -803,7 +803,7 @@ tr:hover td { background: rgba(184,151,58,0.03); }
     <!-- IA -->
     <div class="page" id="page-ia">
       <div class="page-header">
-        <div><div class="page-title">Importar Extrato</div><div class="page-sub">IA extrai e classifica automaticamente</div></div>
+        <div><div class="page-title">Importar Extrato</div><div class="page-sub">IA classifica, você revisa, sistema lança</div></div>
       </div>
 
       <div id="ia-warning" class="card" style="border-color:var(--gold-border);background:var(--gold-dim);margin-bottom:20px;display:none">
@@ -816,35 +816,111 @@ tr:hover td { background: rgba(184,151,58,0.03); }
         </div>
       </div>
 
-      <div class="grid g2" style="margin-bottom:20px">
-        <div class="card" style="border-color:var(--gold-border)">
-          <div style="font-size:12px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">📄 PDF do Extrato Bancário</div>
-          <p style="color:var(--fog);font-size:13px;margin-bottom:16px;line-height:1.6">Envie o PDF do extrato do seu banco. A IA vai extrair todas as movimentações e distribuir automaticamente nas subcontas.</p>
-          <div style="border:2px dashed var(--gold-border);border-radius:var(--radius-sm);padding:28px;text-align:center;cursor:pointer;background:var(--gold-dim)" onclick="document.getElementById('up-pdf').click()">
-            <div style="font-size:28px;margin-bottom:6px">📁</div>
-            <div style="color:var(--fog);font-size:13px">Clique para selecionar PDF</div>
-            <input type="file" id="up-pdf" accept=".pdf" style="display:none" onchange="processarPDF(this)">
+      <!-- Etapa 1: Upload -->
+      <div id="ia-step1">
+        <div class="grid g2" style="margin-bottom:20px">
+          <div class="card" style="border-color:var(--gold-border)">
+            <div style="font-size:12px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">📄 PDF do Extrato Bancário</div>
+            <p style="color:var(--fog);font-size:13px;margin-bottom:16px;line-height:1.6">A IA vai ler o extrato e separar automaticamente os gastos <strong style="color:var(--parchment)">pessoais</strong> dos gastos da <strong style="color:var(--gold)">clínica</strong>.</p>
+            <div style="border:2px dashed var(--gold-border);border-radius:var(--radius-sm);padding:28px;text-align:center;cursor:pointer;background:var(--gold-dim)" onclick="document.getElementById('up-pdf').click()">
+              <div style="font-size:28px;margin-bottom:6px">📁</div>
+              <div style="color:var(--fog);font-size:13px">Clique para selecionar PDF</div>
+              <input type="file" id="up-pdf" accept=".pdf" style="display:none" onchange="processarPDF(this)">
+            </div>
+          </div>
+          <div class="card">
+            <div style="font-size:12px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">📷 Comprovante / Recibo</div>
+            <p style="color:var(--fog);font-size:13px;margin-bottom:16px;line-height:1.6">Envie a foto de um comprovante. A IA extrai e classifica automaticamente.</p>
+            <div style="border:2px dashed var(--slate);border-radius:var(--radius-sm);padding:28px;text-align:center;cursor:pointer" onclick="document.getElementById('up-img').click()">
+              <div style="font-size:28px;margin-bottom:6px">🖼️</div>
+              <div style="color:var(--fog);font-size:13px">Clique para selecionar imagem</div>
+              <input type="file" id="up-img" accept="image/*" style="display:none" onchange="processarImagem(this)">
+            </div>
           </div>
         </div>
 
-        <div class="card">
-          <div style="font-size:12px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">📷 Comprovante / Recibo</div>
-          <p style="color:var(--fog);font-size:13px;margin-bottom:16px;line-height:1.6">Envie a foto de um comprovante. A IA extrai valor, data e estabelecimento e registra na subconta correta.</p>
-          <div style="border:2px dashed var(--slate);border-radius:var(--radius-sm);padding:28px;text-align:center;cursor:pointer" onclick="document.getElementById('up-img').click()">
-            <div style="font-size:28px;margin-bottom:6px">🖼️</div>
-            <div style="color:var(--fog);font-size:13px">Clique para selecionar imagem</div>
-            <input type="file" id="up-img" accept="image/*" style="display:none" onchange="processarImagem(this)">
+        <!-- Como funciona -->
+        <div class="card" style="border-color:var(--slate)">
+          <div style="font-size:12px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:1px;margin-bottom:16px">Como funciona</div>
+          <div style="display:flex;gap:0;flex-wrap:wrap">
+            <div style="flex:1;min-width:180px;padding:12px 16px;border-right:1px solid var(--slate)">
+              <div style="font-size:20px;margin-bottom:8px">1️⃣</div>
+              <div style="font-weight:600;font-size:13px;margin-bottom:4px">IA lê o extrato</div>
+              <div style="font-size:12px;color:var(--fog)">Extrai todas as movimentações do PDF</div>
+            </div>
+            <div style="flex:1;min-width:180px;padding:12px 16px;border-right:1px solid var(--slate)">
+              <div style="font-size:20px;margin-bottom:8px">2️⃣</div>
+              <div style="font-weight:600;font-size:13px;margin-bottom:4px">Classifica automaticamente</div>
+              <div style="font-size:12px;color:var(--fog)">Separa pessoal × clínica e define categoria</div>
+            </div>
+            <div style="flex:1;min-width:180px;padding:12px 16px;border-right:1px solid var(--slate)">
+              <div style="font-size:20px;margin-bottom:8px">3️⃣</div>
+              <div style="font-weight:600;font-size:13px;margin-bottom:4px">Você revisa</div>
+              <div style="font-size:12px;color:var(--fog)">Ajusta o que a IA errou antes de confirmar</div>
+            </div>
+            <div style="flex:1;min-width:180px;padding:12px 16px">
+              <div style="font-size:20px;margin-bottom:8px">4️⃣</div>
+              <div style="font-weight:600;font-size:13px;margin-bottom:4px">Sistema lança tudo</div>
+              <div style="font-size:12px;color:var(--fog)">Gastos da clínica vão para as subcontas certas</div>
+            </div>
           </div>
         </div>
       </div>
 
-      <div id="ia-results" style="display:none">
-        <div class="card" style="border-color:var(--gold-border)">
-          <div style="font-size:12px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:1px;margin-bottom:16px">Transações Extraídas — Revise antes de confirmar</div>
-          <div id="ia-body"></div>
-          <div style="margin-top:16px;display:flex;gap:10px">
-            <button class="btn btn-gold" onclick="confirmarIA()">✓ Confirmar Todas</button>
-            <button class="btn btn-ghost btn-sm" onclick="document.getElementById('ia-results').style.display='none'">Cancelar</button>
+      <!-- Etapa 2: Revisão -->
+      <div id="ia-step2" style="display:none">
+        <div class="card" style="border-color:var(--gold-border);margin-bottom:16px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+            <div style="font-size:16px;font-weight:700">Revise as transações extraídas</div>
+            <div style="display:flex;gap:8px">
+              <span id="ia-count-pessoal" class="badge b-gray">0 pessoais</span>
+              <span id="ia-count-clinica" class="badge b-gold">0 da clínica</span>
+            </div>
+          </div>
+
+          <!-- Pessoais -->
+          <div id="ia-grupo-pessoal" style="margin-bottom:24px">
+            <div style="font-size:11px;font-weight:700;color:var(--fog);text-transform:uppercase;letter-spacing:2px;padding:10px 14px;background:rgba(255,255,255,0.04);border-radius:var(--radius-sm);margin-bottom:8px">
+              👤 Gastos Pessoais — serão lançados como Pró-labore
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Data</th><th>Descrição</th><th>Categoria Pessoal</th><th>Valor</th><th>Incluir?</th></tr></thead>
+                <tbody id="tb-ia-pessoal"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Clínica -->
+          <div id="ia-grupo-clinica">
+            <div style="font-size:11px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:2px;padding:10px 14px;background:var(--gold-dim);border:1px solid var(--gold-border);border-radius:var(--radius-sm);margin-bottom:8px">
+              🏥 Gastos da Clínica — serão distribuídos nas subcontas
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Subconta</th><th>Valor</th><th>Incluir?</th></tr></thead>
+                <tbody id="tb-ia-clinica"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Receitas -->
+          <div id="ia-grupo-receitas" style="margin-top:24px">
+            <div style="font-size:11px;font-weight:700;color:var(--emerald);text-transform:uppercase;letter-spacing:2px;padding:10px 14px;background:var(--emerald-dim);border-radius:var(--radius-sm);margin-bottom:8px">
+              💰 Receitas — serão distribuídas nas subcontas pelos percentuais configurados
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Valor</th><th>Incluir?</th></tr></thead>
+                <tbody id="tb-ia-receitas"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div style="margin-top:20px;display:flex;gap:10px;align-items:center">
+            <button class="btn btn-gold" onclick="confirmarIA()">✓ Confirmar e Lançar Tudo</button>
+            <button class="btn btn-ghost btn-sm" onclick="cancelarIA()">Cancelar</button>
+            <span id="ia-total-info" style="font-size:13px;color:var(--fog);margin-left:8px"></span>
           </div>
         </div>
       </div>
@@ -1486,142 +1562,279 @@ function checkIAWarning() {
   if(w) w.style.display = localStorage.getItem('openai_key') ? 'none' : 'flex';
 }
 
+// ══════════════════════════════
+// PROCESSAMENTO PDF
+// ══════════════════════════════
+async function extrairTextoPDF(file) {
+  const arrayBuffer = await file.arrayBuffer();
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  let texto = '';
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const tc = await page.getTextContent();
+    texto += tc.items.map(item => item.str).join(' ') + '\n';
+  }
+  return texto;
+}
+
+async function chamarOpenAI(prompt, key) {
+  const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+    body: JSON.stringify({
+      model: 'gpt-4o',
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 4000
+    })
+  });
+  const d = await resp.json();
+  if (d.error) throw new Error(d.error.message);
+  return d.choices?.[0]?.message?.content || '';
+}
+
 async function processarPDF(input) {
-  const file = input.files[0]; if(!file) return;
+  const file = input.files[0]; if (!file) return;
   const key = localStorage.getItem('openai_key');
-  if(!key) return toast('Configure a chave da OpenAI primeiro','error');
-  toast('Extraindo texto do PDF... aguarde');
+  if (!key) return toast('Configure a chave da OpenAI primeiro', 'error');
 
+  toast('Extraindo texto do PDF...');
+  let texto = '';
   try {
-    // Extrair texto do PDF usando PDF.js
-    const arrayBuffer = await file.arrayBuffer();
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
-    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-    
-    let textoCompleto = '';
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      const textContent = await page.getTextContent();
-      const pageText = textContent.items.map(item => item.str).join(' ');
-      textoCompleto += pageText + '\n';
+    texto = await extrairTextoPDF(file);
+    if (!texto.trim()) return toast('PDF sem texto detectável.', 'error');
+  } catch(e) { return toast('Erro ao ler PDF: ' + e.message, 'error'); }
+
+  toast('IA classificando transações... aguarde');
+
+  const catPessoais = CATS.filter(c=>c.tipo==='despesa').map(c=>c.nome).join(', ');
+  const catClinica = ['Consulta','Procedimento','Aluguel da Sala','Material Clínico','Pessoal / Secretária','Impostos / Guias','Marketing','Equipamentos','Sistema / Software'].join(', ');
+
+  const prompt = `Você é um assistente financeiro especializado em médicos PJ brasileiros.
+
+Analise este extrato bancário de um médico que mistura gastos pessoais e da clínica na mesma conta.
+
+Sua tarefa é:
+1. Extrair TODAS as transações
+2. Classificar cada uma como: receita, despesa_pessoal ou despesa_clinica
+3. Atribuir categoria e subconta corretas
+
+Retorne APENAS JSON válido neste formato exato:
+{
+  "transacoes": [
+    {
+      "data": "YYYY-MM-DD",
+      "descricao": "nome curto do estabelecimento/descrição",
+      "valor": 0.00,
+      "tipo": "receita | despesa_pessoal | despesa_clinica",
+      "categoria": "nome da categoria",
+      "subconta": "operacional | impostos | prolabore | reserva | antecipacao"
     }
+  ]
+}
 
-    if (!textoCompleto.trim()) {
-      return toast('PDF sem texto detectável. Tente enviar como imagem.','error');
-    }
+Regras de classificação:
 
-    toast('Enviando para IA classificar... aguarde');
+RECEITAS (tipo: receita):
+- Pagamentos de pacientes, convênios, procedimentos, consultas
+- subconta: operacional (será redistribuída pelos percentuais configurados)
 
-    const resp = await fetch('https://api.openai.com/v1/chat/completions',{
-      method:'POST',
-      headers:{'Content-Type':'application/json','Authorization':`Bearer ${key}`},
-      body: JSON.stringify({
-        model:'gpt-4o',
-        messages:[{
-          role:'user',
-          content:`Você é um assistente financeiro para médicos e profissionais de saúde.
-Analise este extrato bancário e extraia TODAS as transações financeiras.
-Retorne APENAS um JSON válido neste formato exato, sem texto antes ou depois:
-{"transacoes":[{"data":"YYYY-MM-DD","descricao":"descrição curta do estabelecimento","valor":00.00,"tipo":"receita ou despesa","subconta":"operacional","categoria":"Consulta"}]}
+DESPESAS PESSOAIS (tipo: despesa_pessoal):
+- Supermercado, restaurante, farmácia pessoal, combustível, lazer, vestuário, academia, streaming
+- Categorias disponíveis: ${catPessoais}
+- subconta: prolabore (pois é retirada do médico)
 
-Regras de classificação da subconta:
-- Entradas (créditos, recebimentos, consultas) = tipo: receita, subconta: operacional
-- Impostos, DAS, DARF, guias = tipo: despesa, subconta: impostos  
-- Aluguel, energia, água, internet, materiais do consultório = tipo: despesa, subconta: operacional
-- Pró-labore, retirada do sócio = tipo: despesa, subconta: prolabore
-- Aplicações, investimentos = tipo: despesa, subconta: reserva
+DESPESAS DA CLÍNICA (tipo: despesa_clinica):
+- Material clínico, aluguel da sala, secretária, equipamentos, marketing, softwares médicos
+- DARF, DAS, guias de impostos = subconta: impostos
+- Aluguel, energia, material, pessoal = subconta: operacional  
+- Aplicações, poupança, investimentos = subconta: reserva
+- Categorias: ${catClinica}
 
 Texto do extrato:
-${textoCompleto.substring(0, 8000)}`
-        }],
-        max_tokens:4000
-      })
-    });
+${texto.substring(0, 8000)}`;
 
-    const d = await resp.json();
-    if (d.error) return toast('Erro OpenAI: ' + d.error.message,'error');
-    const text = d.choices?.[0]?.message?.content||'';
-    const clean = text.replace(/```json|```/g,'').trim();
+  try {
+    const respText = await chamarOpenAI(prompt, key);
+    const clean = respText.replace(/\`\`\`json|\`\`\`/g,'').trim();
     const parsed = JSON.parse(clean);
-    mostrarResultadosIA(parsed.transacoes||[]);
-  } catch(err) { 
-    toast('Erro: '+err.message,'error'); 
-    console.error(err);
+    mostrarResultadosIA(parsed.transacoes || []);
+  } catch(e) {
+    toast('Erro ao processar: ' + e.message, 'error');
+    console.error(e);
   }
 }
 
 async function processarImagem(input) {
-  const file = input.files[0]; if(!file) return;
+  const file = input.files[0]; if (!file) return;
   const key = localStorage.getItem('openai_key');
-  if(!key) return toast('Configure a chave da OpenAI primeiro','error');
+  if (!key) return toast('Configure a chave da OpenAI primeiro', 'error');
   toast('Lendo comprovante com IA...');
 
   const reader = new FileReader();
   reader.onload = async (e) => {
     const b64 = e.target.result.split(',')[1];
     try {
-      const resp = await fetch('https://api.openai.com/v1/chat/completions',{
-        method:'POST',
-        headers:{'Content-Type':'application/json','Authorization':`Bearer ${key}`},
+      const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
         body: JSON.stringify({
-          model:'gpt-4o',
-          messages:[{role:'user',content:[
-            {type:'text',text:'Extraia as informações deste comprovante. Retorne APENAS JSON: {"transacoes":[{"data":"YYYY-MM-DD","descricao":"estabelecimento","valor":0.00,"tipo":"despesa","subconta":"operacional","categoria":"Outros"}]}'},
-            {type:'image_url',image_url:{url:`data:${file.type};base64,${b64}`}}
+          model: 'gpt-4o',
+          messages: [{ role: 'user', content: [
+            { type: 'text', text: `Extraia as informações deste comprovante de pagamento de um médico.
+Retorne APENAS JSON: {"transacoes":[{"data":"YYYY-MM-DD","descricao":"nome do estabelecimento","valor":0.00,"tipo":"despesa_pessoal ou despesa_clinica","categoria":"categoria adequada","subconta":"operacional"}]}
+Se for gasto pessoal: tipo=despesa_pessoal, subconta=prolabore
+Se for gasto da clínica: tipo=despesa_clinica, subconta=operacional` },
+            { type: 'image_url', image_url: { url: `data:${file.type};base64,${b64}` } }
           ]}],
-          max_tokens:500
+          max_tokens: 500
         })
       });
       const d = await resp.json();
-      const content = d.choices?.[0]?.message?.content||'';
-      const parsed = JSON.parse(content.replace(/```json|```/g,'').trim());
-      mostrarResultadosIA(parsed.transacoes||[]);
-    } catch(err) { toast('Erro: '+err.message,'error'); }
+      if (d.error) return toast('Erro OpenAI: ' + d.error.message, 'error');
+      const text = d.choices?.[0]?.message?.content || '';
+      const parsed = JSON.parse(text.replace(/\`\`\`json|\`\`\`/g,'').trim());
+      mostrarResultadosIA(parsed.transacoes || []);
+    } catch(e) { toast('Erro: ' + e.message, 'error'); }
   };
   reader.readAsDataURL(file);
 }
 
 function mostrarResultadosIA(transacoes) {
-  if(!transacoes.length) return toast('Nenhuma transação encontrada','error');
+  if (!transacoes.length) return toast('Nenhuma transação encontrada', 'error');
+
   const cfg = getSubConfig();
-  document.getElementById('ia-body').innerHTML = `
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Data</th><th>Descrição</th><th>Tipo</th><th>Subconta</th><th>Valor</th></tr></thead>
-        <tbody>${transacoes.map((t,i)=>`
-          <tr>
-            <td>${fmtDate(t.data)}</td>
-            <td>${t.descricao}</td>
-            <td><span class="badge ${t.tipo==='receita'?'b-green':'b-red'}">${t.tipo==='receita'?'Entrada':'Saída'}</span></td>
-            <td>
-              <select class="form-control" id="ia-sub-${i}" style="padding:6px 10px;font-size:12px">
-                ${Object.entries(cfg).map(([k,s])=>`<option value="${k}" ${k===t.subconta?'selected':''}>${s.nome}</option>`).join('')}
-              </select>
-            </td>
-            <td class="${t.tipo==='receita'?'pos':'neg'}" style="font-weight:700">${t.tipo==='receita'?'+':'-'}${fmt(t.valor)}</td>
-          </tr>`).join('')}
-        </tbody>
-      </table>
-    </div>`;
-  window._iaTransacoes = transacoes;
-  document.getElementById('ia-results').style.display = 'block';
-  toast(`${transacoes.length} transações extraídas! Revise e confirme.`);
+  const receitas = transacoes.filter(t => t.tipo === 'receita');
+  const pessoais = transacoes.filter(t => t.tipo === 'despesa_pessoal');
+  const clinica  = transacoes.filter(t => t.tipo === 'despesa_clinica');
+
+  // Atualizar contadores
+  document.getElementById('ia-count-pessoal').textContent = `${pessoais.length} pessoais`;
+  document.getElementById('ia-count-clinica').textContent = `${clinica.length} da clínica`;
+
+  const catsPessoais = CATS.filter(c=>c.tipo==='despesa');
+  const catsClinica  = CATS.filter(c=>c.tipo==='despesa');
+  const catsReceita  = CATS.filter(c=>c.tipo==='receita');
+
+  // Tabela pessoais
+  document.getElementById('tb-ia-pessoal').innerHTML = pessoais.length ? pessoais.map((t,i) => `
+    <tr>
+      <td>${fmtDate(t.data)}</td>
+      <td style="font-weight:500">${t.descricao}</td>
+      <td>
+        <select class="form-control" id="ia-cat-p-${i}" style="padding:5px 8px;font-size:12px">
+          ${catsPessoais.map(c=>`<option value="${c.id}" ${c.nome===t.categoria?'selected':''}>${c.nome}</option>`).join('')}
+        </select>
+      </td>
+      <td class="neg" style="font-weight:700">-${fmt(t.valor)}</td>
+      <td><input type="checkbox" id="ia-chk-p-${i}" checked style="width:16px;height:16px;cursor:pointer"></td>
+    </tr>`).join('') : '<tr><td colspan="5" style="text-align:center;color:var(--fog);padding:16px">Nenhum gasto pessoal identificado</td></tr>';
+
+  // Tabela clínica
+  document.getElementById('tb-ia-clinica').innerHTML = clinica.length ? clinica.map((t,i) => `
+    <tr>
+      <td>${fmtDate(t.data)}</td>
+      <td style="font-weight:500">${t.descricao}</td>
+      <td>
+        <select class="form-control" id="ia-cat-c-${i}" style="padding:5px 8px;font-size:12px">
+          ${catsClinica.map(c=>`<option value="${c.id}" ${c.nome===t.categoria?'selected':''}>${c.nome}</option>`).join('')}
+        </select>
+      </td>
+      <td>
+        <select class="form-control" id="ia-sub-c-${i}" style="padding:5px 8px;font-size:12px">
+          ${Object.entries(cfg).map(([k,s])=>`<option value="${k}" ${k===t.subconta?'selected':''}>${s.nome}</option>`).join('')}
+        </select>
+      </td>
+      <td class="neg" style="font-weight:700">-${fmt(t.valor)}</td>
+      <td><input type="checkbox" id="ia-chk-c-${i}" checked style="width:16px;height:16px;cursor:pointer"></td>
+    </tr>`).join('') : '<tr><td colspan="6" style="text-align:center;color:var(--fog);padding:16px">Nenhum gasto da clínica identificado</td></tr>';
+
+  // Tabela receitas
+  document.getElementById('tb-ia-receitas').innerHTML = receitas.length ? receitas.map((t,i) => `
+    <tr>
+      <td>${fmtDate(t.data)}</td>
+      <td style="font-weight:500">${t.descricao}</td>
+      <td>
+        <select class="form-control" id="ia-cat-r-${i}" style="padding:5px 8px;font-size:12px">
+          ${catsReceita.map(c=>`<option value="${c.id}" ${c.nome===t.categoria?'selected':''}>${c.nome}</option>`).join('')}
+        </select>
+      </td>
+      <td class="pos" style="font-weight:700">+${fmt(t.valor)}</td>
+      <td><input type="checkbox" id="ia-chk-r-${i}" checked style="width:16px;height:16px;cursor:pointer"></td>
+    </tr>`).join('') : '<tr><td colspan="5" style="text-align:center;color:var(--fog);padding:16px">Nenhuma receita identificada</td></tr>';
+
+  // Total
+  const totalRec = receitas.reduce((s,t)=>s+t.valor,0);
+  const totalDesp = [...pessoais,...clinica].reduce((s,t)=>s+t.valor,0);
+  document.getElementById('ia-total-info').textContent = 
+    `${transacoes.length} transações · Entradas: ${fmt(totalRec)} · Saídas: ${fmt(totalDesp)}`;
+
+  window._iaReceitas = receitas;
+  window._iaPessoais = pessoais;
+  window._iaClinica  = clinica;
+
+  document.getElementById('ia-step1').style.display = 'none';
+  document.getElementById('ia-step2').style.display = 'block';
+  toast(`${transacoes.length} transações classificadas! Revise e confirme.`);
+}
+
+function cancelarIA() {
+  document.getElementById('ia-step1').style.display = 'block';
+  document.getElementById('ia-step2').style.display = 'none';
+  window._iaReceitas = [];
+  window._iaPessoais = [];
+  window._iaClinica  = [];
 }
 
 async function confirmarIA() {
-  const trans = window._iaTransacoes||[];
+  const cfg = getSubConfig();
   let ok = 0;
-  for(let i=0;i<trans.length;i++) {
-    const t = trans[i];
-    const sub = document.getElementById(`ia-sub-${i}`)?.value||'operacional';
-    const { error } = await sb.from('transactions').insert({
-      user_id: USER.id, tipo: t.tipo, descricao: t.descricao,
-      valor: t.valor, data_movimento: t.data, subconta: sub, origem: 'pdf'
-    });
-    if(!error) ok++;
+
+  // 1. Receitas — distribuir nas subcontas pelos percentuais
+  for (let i = 0; i < (window._iaReceitas||[]).length; i++) {
+    const t = window._iaReceitas[i];
+    if (!document.getElementById(`ia-chk-r-${i}`)?.checked) continue;
+    const catId = document.getElementById(`ia-cat-r-${i}`)?.value || null;
+    const dist = distribuirNasSubcontas(t.valor);
+    for (const [sub, val] of Object.entries(dist)) {
+      const { error } = await sb.from('transactions').insert({
+        user_id: USER.id, tipo: 'receita', descricao: t.descricao,
+        valor: val, data_movimento: t.data, category_id: catId,
+        subconta: sub, origem: 'pdf'
+      });
+      if (!error) ok++;
+    }
   }
-  toast(`${ok} transações importadas!`);
-  document.getElementById('ia-results').style.display = 'none';
+
+  // 2. Despesas pessoais — lançar como pró-labore
+  for (let i = 0; i < (window._iaPessoais||[]).length; i++) {
+    const t = window._iaPessoais[i];
+    if (!document.getElementById(`ia-chk-p-${i}`)?.checked) continue;
+    const catId = document.getElementById(`ia-cat-p-${i}`)?.value || null;
+    const { error } = await sb.from('transactions').insert({
+      user_id: USER.id, tipo: 'despesa', descricao: t.descricao,
+      valor: t.valor, data_movimento: t.data, category_id: catId,
+      subconta: 'prolabore', origem: 'pdf'
+    });
+    if (!error) ok++;
+  }
+
+  // 3. Despesas da clínica — subconta definida pela IA (revisável)
+  for (let i = 0; i < (window._iaClinica||[]).length; i++) {
+    const t = window._iaClinica[i];
+    if (!document.getElementById(`ia-chk-c-${i}`)?.checked) continue;
+    const catId = document.getElementById(`ia-cat-c-${i}`)?.value || null;
+    const sub   = document.getElementById(`ia-sub-c-${i}`)?.value || 'operacional';
+    const { error } = await sb.from('transactions').insert({
+      user_id: USER.id, tipo: 'despesa', descricao: t.descricao,
+      valor: t.valor, data_movimento: t.data, category_id: catId,
+      subconta: sub, origem: 'pdf'
+    });
+    if (!error) ok++;
+  }
+
+  toast(`✓ ${ok} transações lançadas com sucesso!`);
+  cancelarIA();
   loadDashboard();
 }
 
