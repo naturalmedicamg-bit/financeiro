@@ -730,7 +730,7 @@ tr:hover td { background: rgba(184,151,58,0.03); }
       <div class="card">
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Subconta</th><th>Origem</th><th>Valor</th><th></th></tr></thead>
+            <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Subconta</th><th>Origem</th><th>Valor</th><th>Ações</th></tr></thead>
             <tbody id="tb-extrato"></tbody>
           </table>
         </div>
@@ -1059,6 +1059,42 @@ tr:hover td { background: rgba(184,151,58,0.03); }
     </div>
     <div class="form-group"><label>Data Alvo</label><input type="date" id="m-data" class="form-control"></div>
     <button class="btn btn-gold" onclick="salvarMeta()">Salvar</button>
+  </div>
+</div>
+
+<!-- Modal Editar Lançamento -->
+<div class="modal-overlay" id="modal-editar">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Editar Lançamento</div>
+      <button class="modal-close" onclick="closeModal('modal-editar')">×</button>
+    </div>
+    <input type="hidden" id="ed-id">
+    <div class="form-group"><label>Tipo</label>
+      <select id="ed-tipo" class="form-control">
+        <option value="receita">Receita (Entrada)</option>
+        <option value="despesa">Despesa (Saída)</option>
+      </select>
+    </div>
+    <div class="form-group"><label>Descrição</label><input type="text" id="ed-desc" class="form-control"></div>
+    <div class="form-row">
+      <div class="form-group"><label>Valor (R$)</label><input type="number" id="ed-valor" class="form-control" step="0.01"></div>
+      <div class="form-group"><label>Data</label><input type="date" id="ed-data" class="form-control"></div>
+    </div>
+    <div class="form-group"><label>Subconta</label>
+      <select id="ed-subconta" class="form-control">
+        <option value="impostos">Impostos</option>
+        <option value="prolabore">Pró-labore</option>
+        <option value="operacional">Operacional</option>
+        <option value="reserva">Reserva</option>
+        <option value="antecipacao">Antecipação</option>
+      </select>
+    </div>
+    <div class="form-group"><label>Observação</label><input type="text" id="ed-obs" class="form-control"></div>
+    <div style="display:flex;gap:10px">
+      <button class="btn btn-gold" style="flex:1" onclick="salvarEdicao()">Salvar Alterações</button>
+      <button class="btn btn-danger" onclick="confirmarExclusao()">🗑 Excluir</button>
+    </div>
   </div>
 </div>
 
@@ -1409,7 +1445,10 @@ async function loadExtrato() {
       <td>${t.subconta?`<span class="badge ${subBadgeClass(t.subconta)}">${cfg[t.subconta]?.nome||t.subconta}</span>`:'—'}</td>
       <td><span class="badge b-gray" style="font-size:10px">${t.origem||'manual'}</span></td>
       <td class="${t.tipo==='receita'?'pos':'neg'}" style="font-weight:700">${t.tipo==='receita'?'+':'-'}${fmt(t.valor)}</td>
-      <td><button class="btn btn-danger btn-xs" onclick="deletar('${t.id}')">✕</button></td>
+      <td style="display:flex;gap:6px">
+        <button class="btn btn-ghost btn-xs" onclick="abrirEdicao(${JSON.stringify(t).replace(/"/g,'&quot;')})">✏️</button>
+        <button class="btn btn-danger btn-xs" onclick="deletar('${t.id}')">✕</button>
+      </td>
     </tr>`).join('') : '<tr><td colspan="7" style="text-align:center;color:var(--fog);padding:24px">Nenhuma movimentação neste mês</td></tr>';
 }
 
@@ -1418,6 +1457,49 @@ async function deletar(id) {
   await sb.from('transactions').delete().eq('id',id);
   toast('Excluído');
   loadExtrato(); loadDashboard();
+}
+
+function abrirEdicao(t) {
+  document.getElementById('ed-id').value = t.id;
+  document.getElementById('ed-tipo').value = t.tipo;
+  document.getElementById('ed-desc').value = t.descricao;
+  document.getElementById('ed-valor').value = t.valor;
+  document.getElementById('ed-data').value = t.data_movimento;
+  document.getElementById('ed-subconta').value = t.subconta || 'operacional';
+  document.getElementById('ed-obs').value = t.observacao || '';
+  openModal('modal-editar');
+}
+
+async function salvarEdicao() {
+  const id = document.getElementById('ed-id').value;
+  const tipo = document.getElementById('ed-tipo').value;
+  const descricao = document.getElementById('ed-desc').value.trim();
+  const valor = parseFloat(document.getElementById('ed-valor').value);
+  const data_movimento = document.getElementById('ed-data').value;
+  const subconta = document.getElementById('ed-subconta').value;
+  const observacao = document.getElementById('ed-obs').value.trim();
+
+  if (!descricao || !valor || !data_movimento) return toast('Preencha todos os campos', 'error');
+
+  const { error } = await sb.from('transactions').update({
+    tipo, descricao, valor, data_movimento, subconta, observacao: observacao || null
+  }).eq('id', id);
+
+  if (error) return toast('Erro: ' + error.message, 'error');
+  toast('Lançamento atualizado!');
+  closeModal('modal-editar');
+  loadExtrato();
+  loadDashboard();
+}
+
+async function confirmarExclusao() {
+  const id = document.getElementById('ed-id').value;
+  if (!confirm('Excluir este lançamento definitivamente?')) return;
+  await sb.from('transactions').delete().eq('id', id);
+  toast('Lançamento excluído');
+  closeModal('modal-editar');
+  loadExtrato();
+  loadDashboard();
 }
 
 // ══════════════════════════════
