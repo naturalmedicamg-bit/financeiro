@@ -1610,54 +1610,38 @@ async function processarPDF(input) {
   const catPessoais = CATS.filter(c=>c.tipo==='despesa').map(c=>c.nome).join(', ');
   const catClinica = ['Consulta','Procedimento','Aluguel da Sala','Material Clínico','Pessoal / Secretária','Impostos / Guias','Marketing','Equipamentos','Sistema / Software'].join(', ');
 
-  const prompt = `Você é um assistente financeiro especializado em médicos PJ brasileiros.
+  const prompt = `Você é um parser de extratos bancários. Responda SOMENTE com JSON puro, sem markdown, sem explicações, sem texto antes ou depois.
 
-Analise este extrato bancário de um médico que mistura gastos pessoais e da clínica na mesma conta.
+Analise o extrato de um médico PJ brasileiro que mistura gastos pessoais e da clínica.
 
-Sua tarefa é:
-1. Extrair TODAS as transações
-2. Classificar cada uma como: receita, despesa_pessoal ou despesa_clinica
-3. Atribuir categoria e subconta corretas
+Formato obrigatório da resposta (apenas isso, nada mais):
+{"transacoes":[{"data":"YYYY-MM-DD","descricao":"texto curto","valor":0.00,"tipo":"receita","categoria":"Consulta","subconta":"operacional"}]}
 
-Retorne APENAS JSON válido neste formato exato:
-{
-  "transacoes": [
-    {
-      "data": "YYYY-MM-DD",
-      "descricao": "nome curto do estabelecimento/descrição",
-      "valor": 0.00,
-      "tipo": "receita | despesa_pessoal | despesa_clinica",
-      "categoria": "nome da categoria",
-      "subconta": "operacional | impostos | prolabore | reserva | antecipacao"
-    }
-  ]
-}
+Valores válidos para "tipo": receita, despesa_pessoal, despesa_clinica
+Valores válidos para "subconta": operacional, impostos, prolabore, reserva, antecipacao
 
-Regras de classificação:
+Regras:
+- Créditos/recebimentos de pacientes/convênios = tipo:receita, subconta:operacional
+- Supermercado/restaurante/lazer/pessoal = tipo:despesa_pessoal, subconta:prolabore
+- Aluguel sala/material clínico/secretária = tipo:despesa_clinica, subconta:operacional
+- DARF/DAS/impostos = tipo:despesa_clinica, subconta:impostos
+- Aplicações/poupança = tipo:despesa_clinica, subconta:reserva
 
-RECEITAS (tipo: receita):
-- Pagamentos de pacientes, convênios, procedimentos, consultas
-- subconta: operacional (será redistribuída pelos percentuais configurados)
-
-DESPESAS PESSOAIS (tipo: despesa_pessoal):
-- Supermercado, restaurante, farmácia pessoal, combustível, lazer, vestuário, academia, streaming
-- Categorias disponíveis: ${catPessoais}
-- subconta: prolabore (pois é retirada do médico)
-
-DESPESAS DA CLÍNICA (tipo: despesa_clinica):
-- Material clínico, aluguel da sala, secretária, equipamentos, marketing, softwares médicos
-- DARF, DAS, guias de impostos = subconta: impostos
-- Aluguel, energia, material, pessoal = subconta: operacional  
-- Aplicações, poupança, investimentos = subconta: reserva
-- Categorias: ${catClinica}
-
-Texto do extrato:
+Extrato:
 ${texto.substring(0, 8000)}`;
 
   try {
     const respText = await chamarOpenAI(prompt, key);
-    const clean = respText.replace(/\`\`\`json|\`\`\`/g,'').trim();
-    const parsed = JSON.parse(clean);
+    console.log('Resposta IA:', respText);
+    
+    // Limpar resposta de forma mais robusta
+    let clean = respText.trim();
+    // Remover markdown code blocks
+    clean = clean.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
+    // Encontrar o JSON no texto (entre { e })
+    const jsonMatch = clean.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('Nenhum JSON encontrado na resposta da IA');
+    const parsed = JSON.parse(jsonMatch[0]);
     mostrarResultadosIA(parsed.transacoes || []);
   } catch(e) {
     toast('Erro ao processar: ' + e.message, 'error');
