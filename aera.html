@@ -617,6 +617,7 @@ tr:hover td { background: rgba(184,151,58,0.03); }
       <div class="nav-group">
         <div class="nav-group-label">Gestão</div>
         <div class="nav-item" onclick="go('ia')"><span class="icon">🤖</span> Importar Extrato</div>
+        <div class="nav-item" onclick="go('pendentes')"><span class="icon">⏳</span> Pendentes <span id="badge-pendentes" style="display:none;background:var(--red);color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;margin-left:4px">0</span></div>
         <div class="nav-item" onclick="go('metas')"><span class="icon">◎</span> Metas</div>
         <div class="nav-item" onclick="go('config')"><span class="icon">⚙</span> Configurações</div>
       </div>
@@ -938,7 +939,7 @@ tr:hover td { background: rgba(184,151,58,0.03); }
             </div>
             <div class="table-wrap">
               <table>
-                <thead><tr><th>Data</th><th>Descrição</th><th>Categoria Pessoal</th><th>Valor</th><th>Incluir?</th></tr></thead>
+                <thead><tr><th>Data</th><th>Descrição</th><th>Categoria Pessoal</th><th>Valor</th><th>Tipo</th><th>Incluir?</th></tr></thead>
                 <tbody id="tb-ia-pessoal"></tbody>
               </table>
             </div>
@@ -951,7 +952,7 @@ tr:hover td { background: rgba(184,151,58,0.03); }
             </div>
             <div class="table-wrap">
               <table>
-                <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Subconta</th><th>Valor</th><th>Incluir?</th></tr></thead>
+                <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Subconta</th><th>Valor</th><th>Tipo</th><th>Incluir?</th></tr></thead>
                 <tbody id="tb-ia-clinica"></tbody>
               </table>
             </div>
@@ -975,6 +976,32 @@ tr:hover td { background: rgba(184,151,58,0.03); }
             <button class="btn btn-ghost btn-sm" onclick="cancelarIA()">Cancelar</button>
             <span id="ia-total-info" style="font-size:13px;color:var(--fog);margin-left:8px"></span>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PENDENTES -->
+    <div class="page" id="page-pendentes">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Transações Pendentes</div>
+          <div class="page-sub">Lidas pela IA mas aguardando sua decisão</div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:16px;border-color:rgba(245,158,11,0.3);background:rgba(245,158,11,0.05)">
+        <div style="display:flex;align-items:center;gap:12px">
+          <span style="font-size:24px">⏳</span>
+          <div style="font-size:13px;color:var(--fog)">Estas transações foram identificadas pela IA mas você optou por não lançar agora. Revise e decida o que fazer com cada uma.</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Data</th><th>Descrição</th><th>Tipo Sugerido</th><th>Subconta</th><th>Valor</th><th>Ações</th></tr></thead>
+            <tbody id="tb-pendentes"></tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -1289,6 +1316,7 @@ sb.auth.onAuthStateChange(async (event, session) => {
     await loadDashboard();
     buildConfigSubcontasForm();
     checkIAWarning();
+    atualizarBadgePendentes();
   } else {
     document.getElementById('auth-screen').style.display = 'flex';
     document.getElementById('app').style.display = 'none';
@@ -1315,6 +1343,7 @@ function go(page) {
     receitas: loadReceitas,
     despesas: loadDespesas,
     metas: loadMetas,
+    pendentes: loadPendentes,
     ia: checkIAWarning,
   };
   if (loaders[page]) loaders[page]();
@@ -1984,7 +2013,7 @@ function mostrarResultadosIA(transacoes) {
 
   // Tabela pessoais
   document.getElementById('tb-ia-pessoal').innerHTML = pessoais.length ? pessoais.map((t,i) => `
-    <tr>
+    <tr id="ia-row-p-${i}">
       <td>${fmtDate(t.data)}</td>
       <td style="font-weight:500">${t.descricao}</td>
       <td>
@@ -1993,12 +2022,19 @@ function mostrarResultadosIA(transacoes) {
         </select>
       </td>
       <td class="neg" style="font-weight:700">-${fmt(t.valor)}</td>
+      <td>
+        <select class="form-control" id="ia-tipo-p-${i}" style="padding:5px 8px;font-size:12px;border-color:rgba(255,255,255,0.2)">
+          <option value="pessoal" selected>👤 Pessoal</option>
+          <option value="clinica">🏥 Clínica</option>
+          <option value="receita">💰 Receita</option>
+        </select>
+      </td>
       <td><input type="checkbox" id="ia-chk-p-${i}" checked style="width:16px;height:16px;cursor:pointer"></td>
-    </tr>`).join('') : '<tr><td colspan="5" style="text-align:center;color:var(--fog);padding:16px">Nenhum gasto pessoal identificado</td></tr>';
+    </tr>`).join('') : '<tr><td colspan="6" style="text-align:center;color:var(--fog);padding:16px">Nenhum gasto pessoal identificado</td></tr>';
 
   // Tabela clínica
   document.getElementById('tb-ia-clinica').innerHTML = clinica.length ? clinica.map((t,i) => `
-    <tr>
+    <tr id="ia-row-c-${i}">
       <td>${fmtDate(t.data)}</td>
       <td style="font-weight:500">${t.descricao}</td>
       <td>
@@ -2012,8 +2048,15 @@ function mostrarResultadosIA(transacoes) {
         </select>
       </td>
       <td class="neg" style="font-weight:700">-${fmt(t.valor)}</td>
+      <td>
+        <select class="form-control" id="ia-tipo-c-${i}" style="padding:5px 8px;font-size:12px;border-color:var(--gold-border)">
+          <option value="pessoal">👤 Pessoal</option>
+          <option value="clinica" selected>🏥 Clínica</option>
+          <option value="receita">💰 Receita</option>
+        </select>
+      </td>
       <td><input type="checkbox" id="ia-chk-c-${i}" checked style="width:16px;height:16px;cursor:pointer"></td>
-    </tr>`).join('') : '<tr><td colspan="6" style="text-align:center;color:var(--fog);padding:16px">Nenhum gasto da clínica identificado</td></tr>';
+    </tr>`).join('') : '<tr><td colspan="7" style="text-align:center;color:var(--fog);padding:16px">Nenhum gasto da clínica identificado</td></tr>';
 
   // Tabela receitas
   document.getElementById('tb-ia-receitas').innerHTML = receitas.length ? receitas.map((t,i) => `
@@ -2052,56 +2095,104 @@ function cancelarIA() {
   window._iaClinica  = [];
 }
 
+async function lancarTransacao(tipo_final, t, catId, sub) {
+  if (tipo_final === 'receita') {
+    const dist = distribuirNasSubcontas(t.valor);
+    for (const [s, val] of Object.entries(dist)) {
+      await sb.from('transactions').insert({
+        user_id: USER.id, tipo: 'receita', descricao: t.descricao,
+        valor: val, data_movimento: t.data, category_id: catId,
+        subconta: s, origem: 'pdf'
+      });
+    }
+  } else {
+    const subconta_final = tipo_final === 'pessoal' ? 'prolabore' : (sub || 'operacional');
+    await sb.from('transactions').insert({
+      user_id: USER.id, tipo: 'despesa', descricao: t.descricao,
+      valor: t.valor, data_movimento: t.data, category_id: catId,
+      subconta: subconta_final, origem: 'pdf'
+    });
+  }
+}
+
 async function confirmarIA() {
-  const cfg = getSubConfig();
   let ok = 0;
 
-  // 1. Receitas — distribuir nas subcontas pelos percentuais
+  // Receitas
   for (let i = 0; i < (window._iaReceitas||[]).length; i++) {
     const t = window._iaReceitas[i];
     if (!document.getElementById(`ia-chk-r-${i}`)?.checked) continue;
     const catId = document.getElementById(`ia-cat-r-${i}`)?.value || null;
-    const dist = distribuirNasSubcontas(t.valor);
-    for (const [sub, val] of Object.entries(dist)) {
-      const { error } = await sb.from('transactions').insert({
-        user_id: USER.id, tipo: 'receita', descricao: t.descricao,
-        valor: val, data_movimento: t.data, category_id: catId,
-        subconta: sub, origem: 'pdf'
-      });
-      if (!error) ok++;
-    }
+    const tipo_final = document.getElementById(`ia-tipo-r-${i}`)?.value || 'receita';
+    await lancarTransacao(tipo_final, t, catId, null);
+    ok++;
   }
 
-  // 2. Despesas pessoais — lançar como pró-labore
+  // Pessoais — respeitando tipo selecionado
   for (let i = 0; i < (window._iaPessoais||[]).length; i++) {
     const t = window._iaPessoais[i];
     if (!document.getElementById(`ia-chk-p-${i}`)?.checked) continue;
     const catId = document.getElementById(`ia-cat-p-${i}`)?.value || null;
-    const { error } = await sb.from('transactions').insert({
-      user_id: USER.id, tipo: 'despesa', descricao: t.descricao,
-      valor: t.valor, data_movimento: t.data, category_id: catId,
-      subconta: 'prolabore', origem: 'pdf'
-    });
-    if (!error) ok++;
+    const tipo_final = document.getElementById(`ia-tipo-p-${i}`)?.value || 'pessoal';
+    const sub = document.getElementById(`ia-sub-c-${i}`)?.value || 'operacional';
+    await lancarTransacao(tipo_final, t, catId, sub);
+    ok++;
   }
 
-  // 3. Despesas da clínica — subconta definida pela IA (revisável)
+  // Clínica — respeitando tipo selecionado
   for (let i = 0; i < (window._iaClinica||[]).length; i++) {
     const t = window._iaClinica[i];
     if (!document.getElementById(`ia-chk-c-${i}`)?.checked) continue;
     const catId = document.getElementById(`ia-cat-c-${i}`)?.value || null;
-    const sub   = document.getElementById(`ia-sub-c-${i}`)?.value || 'operacional';
-    const { error } = await sb.from('transactions').insert({
-      user_id: USER.id, tipo: 'despesa', descricao: t.descricao,
-      valor: t.valor, data_movimento: t.data, category_id: catId,
-      subconta: sub, origem: 'pdf'
-    });
-    if (!error) ok++;
+    const sub = document.getElementById(`ia-sub-c-${i}`)?.value || 'operacional';
+    const tipo_final = document.getElementById(`ia-tipo-c-${i}`)?.value || 'clinica';
+    await lancarTransacao(tipo_final, t, catId, sub);
+    ok++;
   }
 
-  toast(`✓ ${ok} transações lançadas com sucesso!`);
+  // Salvar desmarcados como pendentes
+  let pendentes = 0;
+
+  for (let i = 0; i < (window._iaReceitas||[]).length; i++) {
+    if (document.getElementById(`ia-chk-r-${i}`)?.checked) continue;
+    const t = window._iaReceitas[i];
+    await sb.from('transacoes_pendentes').insert({
+      user_id: USER.id, descricao: t.descricao, valor: t.valor,
+      tipo_sugerido: 'receita', subconta_sugerida: 'operacional',
+      data_movimento: t.data, origem: 'pdf', status: 'pendente'
+    });
+    pendentes++;
+  }
+
+  for (let i = 0; i < (window._iaPessoais||[]).length; i++) {
+    if (document.getElementById(`ia-chk-p-${i}`)?.checked) continue;
+    const t = window._iaPessoais[i];
+    await sb.from('transacoes_pendentes').insert({
+      user_id: USER.id, descricao: t.descricao, valor: t.valor,
+      tipo_sugerido: 'despesa_pessoal', subconta_sugerida: 'prolabore',
+      data_movimento: t.data, origem: 'pdf', status: 'pendente'
+    });
+    pendentes++;
+  }
+
+  for (let i = 0; i < (window._iaClinica||[]).length; i++) {
+    if (document.getElementById(`ia-chk-c-${i}`)?.checked) continue;
+    const t = window._iaClinica[i];
+    const sub = document.getElementById(`ia-sub-c-${i}`)?.value || 'operacional';
+    await sb.from('transacoes_pendentes').insert({
+      user_id: USER.id, descricao: t.descricao, valor: t.valor,
+      tipo_sugerido: 'despesa_clinica', subconta_sugerida: sub,
+      data_movimento: t.data, origem: 'pdf', status: 'pendente'
+    });
+    pendentes++;
+  }
+
+  let msg = `✓ ${ok} transações lançadas!`;
+  if (pendentes > 0) msg += ` ${pendentes} salvas como pendentes.`;
+  toast(msg);
   cancelarIA();
   loadDashboard();
+  atualizarBadgePendentes();
 }
 
 // ══════════════════════════════
@@ -2447,6 +2538,67 @@ async function deletarCusto(id) {
   await sb.from('custos_estimados').delete().eq('id', id);
   toast('Excluído');
   loadEnvelopes();
+}
+
+// ══════════════════════════════
+// PENDENTES
+// ══════════════════════════════
+async function loadPendentes() {
+  const { data } = await sb.from('transacoes_pendentes')
+    .select('*').eq('status','pendente')
+    .order('created_at',{ascending:false});
+  const rows = data || [];
+  const cfg = getSubConfig();
+
+  const tipoLabel = { receita:'💰 Receita', despesa_pessoal:'👤 Pessoal', despesa_clinica:'🏥 Clínica' };
+  const tbody = document.getElementById('tb-pendentes');
+
+  tbody.innerHTML = rows.length ? rows.map(t => `
+    <tr>
+      <td>${fmtDate(t.data_movimento)}</td>
+      <td style="font-weight:500">${t.descricao}</td>
+      <td><span class="badge b-amber">${tipoLabel[t.tipo_sugerido]||t.tipo_sugerido}</span></td>
+      <td>${t.subconta_sugerida?`<span class="badge ${subBadgeClass(t.subconta_sugerida)}">${cfg[t.subconta_sugerida]?.nome||t.subconta_sugerida}</span>`:'—'}</td>
+      <td style="font-weight:700;color:var(--fog)">${fmt(t.valor)}</td>
+      <td style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-gold btn-xs" onclick="lancarPendente('${t.id}','${t.tipo_sugerido}',${t.valor},'${t.descricao}','${t.data_movimento}','${t.subconta_sugerida}')">✓ Lançar</button>
+        <button class="btn btn-danger btn-xs" onclick="ignorarPendente('${t.id}')">✕ Ignorar</button>
+      </td>
+    </tr>`).join('') 
+  : '<tr><td colspan="6" style="text-align:center;color:var(--fog);padding:32px">Nenhuma transação pendente 🎉</td></tr>';
+
+  atualizarBadgePendentes(rows.length);
+}
+
+async function atualizarBadgePendentes(count) {
+  if (count === undefined) {
+    const { count: c } = await sb.from('transacoes_pendentes').select('*',{count:'exact',head:true}).eq('status','pendente');
+    count = c || 0;
+  }
+  const badge = document.getElementById('badge-pendentes');
+  if (badge) {
+    badge.style.display = count > 0 ? 'inline' : 'none';
+    badge.textContent = count;
+  }
+}
+
+async function lancarPendente(id, tipo_sugerido, valor, descricao, data, subconta) {
+  const t = { valor, descricao, data };
+  await lancarTransacao(
+    tipo_sugerido === 'despesa_pessoal' ? 'pessoal' : tipo_sugerido === 'despesa_clinica' ? 'clinica' : 'receita',
+    t, null, subconta
+  );
+  await sb.from('transacoes_pendentes').update({ status: 'lancado' }).eq('id', id);
+  toast('Lançado com sucesso!');
+  loadPendentes();
+  loadDashboard();
+}
+
+async function ignorarPendente(id) {
+  if (!confirm('Ignorar esta transação permanentemente?')) return;
+  await sb.from('transacoes_pendentes').update({ status: 'ignorado' }).eq('id', id);
+  toast('Transação ignorada');
+  loadPendentes();
 }
 
 // ══════════════════════════════
