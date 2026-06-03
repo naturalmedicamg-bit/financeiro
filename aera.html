@@ -618,11 +618,13 @@ tr:hover td { background: rgba(184,151,58,0.03); }
     </div>
 
     <div class="sidebar-user">
-      <div class="user-pill" onclick="doLogout()">
+      <div class="user-pill">
         <div class="user-av" id="u-av">A</div>
         <div class="user-email" id="u-email">—</div>
-        <span style="color:var(--fog);font-size:12px">→</span>
       </div>
+      <button onclick="doLogout()" style="width:100%;margin-top:8px;padding:9px;background:var(--red-dim);border:1px solid rgba(224,82,82,0.25);border-radius:var(--radius-sm);color:var(--red);font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;letter-spacing:0.5px;text-transform:uppercase">
+        Sair da Conta →
+      </button>
     </div>
   </nav>
 
@@ -1050,11 +1052,16 @@ async function doSignup() {
 }
 
 async function doLogout() {
-  await sb.auth.signOut();
+  try {
+    await sb.auth.signOut();
+  } catch(e) { console.log('signout error:', e); }
   USER = null;
   CATS = [];
+  localStorage.removeItem('sb-zzzlflbnqfpsbxausioh-auth-token');
   document.getElementById('auth-screen').style.display = 'flex';
   document.getElementById('app').style.display = 'none';
+  document.getElementById('l-email') && (document.getElementById('l-email').value = '');
+  document.getElementById('l-pass') && (document.getElementById('l-pass').value = '');
 }
 
 sb.auth.onAuthStateChange(async (event, session) => {
