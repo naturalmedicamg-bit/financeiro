@@ -700,7 +700,7 @@ tr:hover td { background: rgba(184,151,58,0.03); }
         </div>
         <div style="display:flex;gap:10px;align-items:center">
           <input type="month" id="ext-mes" class="form-control" style="width:auto" onchange="loadExtrato()">
-          <button class="btn btn-outline btn-sm" onclick="openModal('modal-lancamento')">+ Lançamento</button>
+          <button class="btn btn-outline btn-sm" onclick="openLancamento('receita')">+ Lançamento</button>
         </div>
       </div>
 
@@ -998,6 +998,7 @@ function openModal(id) { document.getElementById(id).classList.add('open'); }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 
 function openLancamento(tipo) {
+  if (!tipo) tipo = 'receita';
   document.getElementById('l-tipo').value = tipo;
   document.getElementById('l-data').value = new Date().toISOString().split('T')[0];
   populateCatSelect();
@@ -1005,7 +1006,8 @@ function openLancamento(tipo) {
   openModal('modal-lancamento');
 }
 
-function populateCatSelect() {
+async function populateCatSelect() {
+  if (CATS.length === 0) await loadCats();
   const tipo = document.getElementById('l-tipo').value;
   const sel = document.getElementById('l-categoria');
   const list = tipo ? CATS.filter(c=>c.tipo===tipo) : CATS;
@@ -1047,7 +1049,13 @@ async function doSignup() {
   toast('Conta criada! Faça login.');
 }
 
-async function doLogout() { await sb.auth.signOut(); location.reload(); }
+async function doLogout() {
+  await sb.auth.signOut();
+  USER = null;
+  CATS = [];
+  document.getElementById('auth-screen').style.display = 'flex';
+  document.getElementById('app').style.display = 'none';
+}
 
 sb.auth.onAuthStateChange(async (event, session) => {
   if (session?.user) {
