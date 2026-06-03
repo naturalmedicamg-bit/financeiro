@@ -9,6 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
 
 <style>
 :root {
@@ -1483,40 +1484,64 @@ async function processarPDF(input) {
   const file = input.files[0]; if(!file) return;
   const key = localStorage.getItem('openai_key');
   if(!key) return toast('Configure a chave da OpenAI primeiro','error');
-  toast('Lendo extrato com IA... aguarde');
+  toast('Extraindo texto do PDF... aguarde');
 
-  const reader = new FileReader();
-  reader.onload = async (e) => {
-    const b64 = e.target.result.split(',')[1];
-    try {
-      const resp = await fetch('https://api.openai.com/v1/chat/completions',{
-        method:'POST',
-        headers:{'Content-Type':'application/json','Authorization':`Bearer ${key}`},
-        body: JSON.stringify({
-          model:'gpt-4o',
-          messages:[{role:'user',content:[
-            {type:'text',text:`Você é um assistente financeiro para médicos e profissionais de saúde.
-Analise este extrato bancário e extraia TODAS as transações.
-Retorne APENAS um JSON válido neste formato exato:
-{"transacoes":[{"data":"YYYY-MM-DD","descricao":"descrição curta","valor":00.00,"tipo":"receita ou despesa","subconta":"impostos|prolabore|operacional|reserva|antecipacao","categoria":"Consulta|Procedimento|Aluguel|Equipamento|Pessoal|Imposto|Outros"}]}
-Regras de classificação:
-- Entradas de pacientes/consultas/procedimentos = receita, subconta=operacional
-- Impostos/guias = despesa, subconta=impostos
-- Aluguel/contas do consultório = despesa, subconta=operacional
-- Pró-labore/retirada = despesa, subconta=prolabore
-Não inclua texto fora do JSON.`},
-            {type:'image_url',image_url:{url:`data:application/pdf;base64,${b64}`}}
-          ]}],
-          max_tokens:3000
-        })
-      });
-      const d = await resp.json();
-      const content = d.choices?.[0]?.message?.content||'';
-      const parsed = JSON.parse(content.replace(/```json|```/g,'').trim());
-      mostrarResultadosIA(parsed.transacoes||[]);
-    } catch(err) { toast('Erro: '+err.message,'error'); }
-  };
-  reader.readAsDataURL(file);
+  try {
+    // Extrair texto do PDF usando PDF.js
+    const arrayBuffer = await file.arrayBuffer();
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    
+    let textoCompleto = '';
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const textContent = await page.getTextContent();
+      const pageText = textContent.items.map(item => item.str).join(' ');
+      textoCompleto += pageText + '\n';
+    }
+
+    if (!textoCompleto.trim()) {
+      return toast('PDF sem texto detectável. Tente enviar como imagem.','error');
+    }
+
+    toast('Enviando para IA classificar... aguarde');
+
+    const resp = await fetch('https://api.openai.com/v1/chat/completions',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':`Bearer ${key}`},
+      body: JSON.stringify({
+        model:'gpt-4o',
+        messages:[{
+          role:'user',
+          content:`Você é um assistente financeiro para médicos e profissionais de saúde.
+Analise este extrato bancário e extraia TODAS as transações financeiras.
+Retorne APENAS um JSON válido neste formato exato, sem texto antes ou depois:
+{"transacoes":[{"data":"YYYY-MM-DD","descricao":"descrição curta do estabelecimento","valor":00.00,"tipo":"receita ou despesa","subconta":"operacional","categoria":"Consulta"}]}
+
+Regras de classificação da subconta:
+- Entradas (créditos, recebimentos, consultas) = tipo: receita, subconta: operacional
+- Impostos, DAS, DARF, guias = tipo: despesa, subconta: impostos  
+- Aluguel, energia, água, internet, materiais do consultório = tipo: despesa, subconta: operacional
+- Pró-labore, retirada do sócio = tipo: despesa, subconta: prolabore
+- Aplicações, investimentos = tipo: despesa, subconta: reserva
+
+Texto do extrato:
+${textoCompleto.substring(0, 8000)}`
+        }],
+        max_tokens:4000
+      })
+    });
+
+    const d = await resp.json();
+    if (d.error) return toast('Erro OpenAI: ' + d.error.message,'error');
+    const text = d.choices?.[0]?.message?.content||'';
+    const clean = text.replace(/```json|```/g,'').trim();
+    const parsed = JSON.parse(clean);
+    mostrarResultadosIA(parsed.transacoes||[]);
+  } catch(err) { 
+    toast('Erro: '+err.message,'error'); 
+    console.error(err);
+  }
 }
 
 async function processarImagem(input) {
