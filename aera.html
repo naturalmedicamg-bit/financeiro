@@ -1052,15 +1052,13 @@ async function doSignup() {
   toast('Conta criada! Faça login.');
 }
 
-async function doLogout() {
-  try { await sb.auth.signOut(); } catch(e) {}
-  // Limpar todas as chaves do supabase no localStorage
-  Object.keys(localStorage).forEach(k => {
-    if (k.startsWith('sb-')) localStorage.removeItem(k);
-  });
-  USER = null;
-  CATS = [];
-  window.location.reload();
+function doLogout() {
+  // Limpar tudo do localStorage relacionado ao Supabase
+  Object.keys(localStorage).forEach(k => localStorage.removeItem(k));
+  // Limpar sessionStorage também
+  sessionStorage.clear();
+  // Recarregar a página — vai cair na tela de login
+  window.location.href = window.location.href;
 }
 
 sb.auth.onAuthStateChange(async (event, session) => {
