@@ -1462,7 +1462,7 @@ async function loadExtrato() {
 
   const receitas_agrupadas = Object.values(grupos);
   const todos = [
-    ...receitas_agrupadas.map(t => ({ ...t, _agrupado: true })),
+    ...receitas_agrupadas.map(t => ({ ...t, _agrupado: true, valor: t.valor_total })),
     ...despesas_e_avulsas
   ].sort((a,b) => new Date(b.data_movimento) - new Date(a.data_movimento));
 
@@ -1482,7 +1482,8 @@ async function loadExtrato() {
       <td class="${isReceita?'pos':'neg'}" style="font-weight:700">${isReceita?'+':'-'}${fmt(valor)}</td>
       <td style="display:flex;gap:6px">
         ${t._agrupado 
-          ? `<button class="btn btn-danger btn-xs" onclick="deletarGrupo(${JSON.stringify(t.ids).replace(/"/g,'&quot;')})">✕</button>`
+          ? `<button class="btn btn-ghost btn-xs" onclick="abrirEdicaoGrupo(${JSON.stringify(t.ids).replace(/"/g,'&quot;')}, '${t.descricao}', '${t.data_movimento}')">✏️</button>
+             <button class="btn btn-danger btn-xs" onclick="deletarGrupo(${JSON.stringify(t.ids).replace(/"/g,'&quot;')})">✕</button>`
           : `<button class="btn btn-ghost btn-xs" onclick="abrirEdicao(${JSON.stringify(t).replace(/"/g,'&quot;')})">✏️</button>
              <button class="btn btn-danger btn-xs" onclick="deletar('${t.id}')">✕</button>`
         }
@@ -1496,6 +1497,23 @@ async function deletar(id) {
   await sb.from('transactions').delete().eq('id',id);
   toast('Excluído');
   loadExtrato(); loadDashboard();
+}
+
+function abrirEdicaoGrupo(ids, descricao, data) {
+  // Para receitas agrupadas, abre modal simplificado
+  // Permite editar descrição e data — redistribui automaticamente
+  document.getElementById('ed-id').value = ids[0]; // referência
+  document.getElementById('ed-tipo').value = 'receita';
+  document.getElementById('ed-desc').value = descricao;
+  document.getElementById('ed-data').value = data;
+  document.getElementById('ed-subconta').value = 'operacional';
+  document.getElementById('ed-obs').value = '';
+  // Calcular valor total do grupo
+  const valorTotal = window._ultimoGrupoValor || 0;
+  document.getElementById('ed-valor').value = valorTotal;
+  // Guardar IDs para deleção no save
+  window._editandoGrupoIds = ids;
+  openModal('modal-editar');
 }
 
 async function deletarGrupo(ids) {
@@ -1529,12 +1547,28 @@ async function salvarEdicao() {
 
   if (!descricao || !valor || !data_movimento) return toast('Preencha todos os campos', 'error');
 
-  const { error } = await sb.from('transactions').update({
-    tipo, descricao, valor, data_movimento, subconta, observacao: observacao || null
-  }).eq('id', id);
+  // Se é edição de grupo (receita distribuída), apaga e relança redistribuído
+  if (window._editandoGrupoIds?.length > 0) {
+    for (const gid of window._editandoGrupoIds) {
+      await sb.from('transactions').delete().eq('id', gid);
+    }
+    const dist = distribuirNasSubcontas(valor);
+    for (const [sub, val] of Object.entries(dist)) {
+      await sb.from('transactions').insert({
+        user_id: USER.id, tipo: 'receita', descricao,
+        valor: val, data_movimento, subconta: sub, origem: 'manual'
+      });
+    }
+    window._editandoGrupoIds = null;
+    toast('Receita atualizada e redistribuída!');
+  } else {
+    const { error } = await sb.from('transactions').update({
+      tipo, descricao, valor, data_movimento, subconta, observacao: observacao || null
+    }).eq('id', id);
+    if (error) return toast('Erro: ' + error.message, 'error');
+    toast('Lançamento atualizado!');
+  }
 
-  if (error) return toast('Erro: ' + error.message, 'error');
-  toast('Lançamento atualizado!');
   closeModal('modal-editar');
   loadExtrato();
   loadDashboard();
