@@ -1913,7 +1913,10 @@ function salvarConfig() {
   });
   if(total !== 100) return toast(`A soma é ${total}%. Precisa ser 100%.`,'error');
   localStorage.setItem('aera_subcontas', JSON.stringify(novo));
-  toast('Configuração salva!');
+  toast('Configuração salva! Atualizando dashboard...');
+  // Recarregar dashboard e subcontas com novos percentuais
+  loadDashboard();
+  buildConfigSubcontasForm();
 }
 
 function salvarOpenAI() {
