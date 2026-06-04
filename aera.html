@@ -1040,6 +1040,23 @@ tr:hover td { background: rgba(184,151,58,0.03); }
         <button class="btn btn-outline btn-sm" onclick="salvarOpenAI()">Salvar Chave</button>
       </div>
 
+      <!-- Categorias -->
+      <div class="card-gold" style="max-width:600px;margin-bottom:20px">
+        <div style="font-size:11px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:2px;margin-bottom:16px">🏷️ Categorias</div>
+        <div class="grid g2" style="gap:20px">
+          <div>
+            <div style="font-size:12px;font-weight:700;color:var(--emerald);margin-bottom:10px">💰 Receitas</div>
+            <div id="cfg-cats-receita"></div>
+            <button class="btn btn-outline btn-sm" style="margin-top:10px;width:100%" onclick="abrirNovaCategoria('receita')">+ Nova categoria de receita</button>
+          </div>
+          <div>
+            <div style="font-size:12px;font-weight:700;color:var(--red);margin-bottom:10px">💸 Despesas</div>
+            <div id="cfg-cats-despesa"></div>
+            <button class="btn btn-outline btn-sm" style="margin-top:10px;width:100%" onclick="abrirNovaCategoria('despesa')">+ Nova categoria de despesa</button>
+          </div>
+        </div>
+      </div>
+
       <div class="card" style="max-width:540px">
         <div style="font-size:11px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:2px;margin-bottom:16px">👤 Conta</div>
         <p style="font-size:14px;color:var(--fog);margin-bottom:12px" id="cfg-email">—</p>
@@ -1219,6 +1236,23 @@ tr:hover td { background: rgba(184,151,58,0.03); }
   </div>
 </div>
 
+<!-- Modal Categoria -->
+<div class="modal-overlay" id="modal-cfg-categoria">
+  <div class="modal" style="max-width:380px">
+    <div class="modal-header">
+      <div class="modal-title" id="cfg-cat-title">Nova Categoria</div>
+      <button class="modal-close" onclick="closeModal('modal-cfg-categoria')">×</button>
+    </div>
+    <input type="hidden" id="cfg-cat-id">
+    <input type="hidden" id="cfg-cat-tipo">
+    <div class="form-group"><label>Nome</label><input type="text" id="cfg-cat-nome" class="form-control" placeholder="Ex: Consulta, Academia..."></div>
+    <div style="display:flex;gap:10px">
+      <button class="btn btn-gold" style="flex:1" onclick="salvarCfgCategoria()">Salvar</button>
+      <button class="btn btn-danger btn-sm" id="cfg-cat-del-btn" onclick="excluirCfgCategoria()" style="display:none">Excluir</button>
+    </div>
+  </div>
+</div>
+
 <!-- Modal Meta Subconta -->
 <div class="modal-overlay" id="modal-meta-sub">
   <div class="modal">
@@ -1391,6 +1425,7 @@ function go(page) {
     metas: loadMetas,
     pendentes: loadPendentes,
     ia: checkIAWarning,
+    config: renderCfgCategorias,
   };
   if (loaders[page]) loaders[page]();
 }
@@ -1665,15 +1700,18 @@ async function salvarEdicao() {
     window._editandoGrupoIds = null;
     toast('Receita atualizada e redistribuída!');
   } else {
+    const category_id = document.getElementById('ed-categoria')?.value || null;
     const { error } = await sb.from('transactions').update({
-      tipo, descricao, valor, data_movimento, subconta, observacao: observacao || null
+      tipo, descricao, valor, data_movimento, subconta,
+      category_id: category_id || null,
+      observacao: observacao || null
     }).eq('id', id);
     if (error) return toast('Erro: ' + error.message, 'error');
     toast('Lançamento atualizado!');
   }
 
   closeModal('modal-editar');
-  loadExtrato();
+  await loadExtrato();
   loadDashboard();
 }
 
@@ -2850,6 +2888,79 @@ async function ignorarPendente(id) {
   await sb.from('transacoes_pendentes').update({ status: 'ignorado' }).eq('id', id);
   toast('Transação ignorada');
   loadPendentes();
+}
+
+// ══════════════════════════════
+// CATEGORIAS NA CONFIG
+// ══════════════════════════════
+async function renderCfgCategorias() {
+  await loadCats();
+  const receitas = CATS.filter(c => c.tipo === 'receita');
+  const despesas = CATS.filter(c => c.tipo === 'despesa');
+
+  const renderList = (cats, containerId) => {
+    const el = document.getElementById(containerId);
+    if (!el) return;
+    el.innerHTML = cats.map(c => `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:var(--ink-deep);border-radius:var(--radius-sm);margin-bottom:6px;border:1px solid var(--slate)">
+        <span style="font-size:13px;font-weight:500">${c.nome}</span>
+        <button onclick="abrirEditarCategoria('${c.id}','${c.nome}','${c.tipo}')" 
+          style="background:transparent;border:none;color:var(--fog);cursor:pointer;font-size:14px;padding:2px 6px"
+          title="Editar">✏️</button>
+      </div>`).join('') || `<div style="color:var(--fog);font-size:13px;padding:8px">Nenhuma categoria</div>`;
+  };
+
+  renderList(receitas, 'cfg-cats-receita');
+  renderList(despesas, 'cfg-cats-despesa');
+}
+
+function abrirNovaCategoria(tipo) {
+  document.getElementById('cfg-cat-id').value = '';
+  document.getElementById('cfg-cat-tipo').value = tipo;
+  document.getElementById('cfg-cat-nome').value = '';
+  document.getElementById('cfg-cat-title').textContent = `Nova Categoria de ${tipo === 'receita' ? 'Receita' : 'Despesa'}`;
+  document.getElementById('cfg-cat-del-btn').style.display = 'none';
+  openModal('modal-cfg-categoria');
+}
+
+function abrirEditarCategoria(id, nome, tipo) {
+  document.getElementById('cfg-cat-id').value = id;
+  document.getElementById('cfg-cat-tipo').value = tipo;
+  document.getElementById('cfg-cat-nome').value = nome;
+  document.getElementById('cfg-cat-title').textContent = 'Editar Categoria';
+  document.getElementById('cfg-cat-del-btn').style.display = 'inline-flex';
+  openModal('modal-cfg-categoria');
+}
+
+async function salvarCfgCategoria() {
+  const id = document.getElementById('cfg-cat-id').value;
+  const nome = document.getElementById('cfg-cat-nome').value.trim();
+  const tipo = document.getElementById('cfg-cat-tipo').value;
+  if (!nome) return toast('Informe o nome', 'error');
+
+  if (id) {
+    const { error } = await sb.from('categories').update({ nome }).eq('id', id);
+    if (error) return toast('Erro: ' + error.message, 'error');
+    toast('Categoria atualizada!');
+  } else {
+    const { error } = await sb.from('categories').insert({ user_id: USER.id, nome, tipo });
+    if (error) return toast('Erro: ' + error.message, 'error');
+    toast('Categoria criada!');
+  }
+  closeModal('modal-cfg-categoria');
+  renderCfgCategorias();
+  loadCats();
+}
+
+async function excluirCfgCategoria() {
+  const id = document.getElementById('cfg-cat-id').value;
+  const nome = document.getElementById('cfg-cat-nome').value;
+  if (!confirm(`Excluir a categoria "${nome}"? Lançamentos existentes perderão a categoria.`)) return;
+  await sb.from('categories').delete().eq('id', id);
+  toast('Categoria excluída');
+  closeModal('modal-cfg-categoria');
+  renderCfgCategorias();
+  loadCats();
 }
 
 // ══════════════════════════════
