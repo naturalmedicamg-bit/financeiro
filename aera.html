@@ -1170,10 +1170,16 @@ tr:hover td { background: rgba(184,151,58,0.03); }
       <button class="modal-close" onclick="closeModal('modal-editar')">×</button>
     </div>
     <input type="hidden" id="ed-id">
-    <div class="form-group"><label>Tipo</label>
-      <select id="ed-tipo" class="form-control" onchange="atualizarCatsEdicao()">
+    <div class="form-group"><label>Movimentação</label>
+      <select id="ed-tipo" class="form-control" onchange="atualizarCatsEdicao();atualizarTipoEdicao()">
         <option value="receita">Receita (Entrada)</option>
         <option value="despesa">Despesa (Saída)</option>
+      </select>
+    </div>
+    <div class="form-group" id="ed-tipo-wrap" style="display:none"><label>Tipo</label>
+      <select id="ed-tipodespesa" class="form-control">
+        <option value="pessoal">🏠 Casa</option>
+        <option value="clinica">🏥 Clínica</option>
       </select>
     </div>
     <div class="form-group"><label>Descrição</label><input type="text" id="ed-desc" class="form-control"></div>
@@ -1653,8 +1659,14 @@ function atualizarCatsEdicao() {
     CATS.filter(c => c.tipo === tipo).map(c => `<option value="${c.id}">${c.nome}</option>`).join('');
 }
 
+function atualizarTipoEdicao() {
+  const tipo = document.getElementById('ed-tipo').value;
+  const wrap = document.getElementById('ed-tipo-wrap');
+  if (wrap) wrap.style.display = tipo === 'despesa' ? 'block' : 'none';
+}
+
 function abrirEdicao(t) {
-  window._editandoGrupoIds = null; // ← garante que não herda estado de edição anterior
+  window._editandoGrupoIds = null;
   document.getElementById('ed-id').value = t.id;
   document.getElementById('ed-tipo').value = t.tipo;
   document.getElementById('ed-desc').value = t.descricao;
@@ -1662,6 +1674,10 @@ function abrirEdicao(t) {
   document.getElementById('ed-data').value = t.data_movimento;
   document.getElementById('ed-subconta').value = t.subconta || 'operacional';
   document.getElementById('ed-obs').value = t.observacao || '';
+  // Casa ou Clínica
+  const tipodespesa = t.subconta === 'prolabore' ? 'pessoal' : 'clinica';
+  document.getElementById('ed-tipodespesa').value = tipodespesa;
+  atualizarTipoEdicao();
   // Popular e selecionar categoria
   atualizarCatsEdicao();
   if (t.category_id) document.getElementById('ed-categoria').value = t.category_id;
@@ -1695,8 +1711,14 @@ async function salvarEdicao() {
     toast('Receita atualizada e redistribuída!');
   } else {
     const category_id = document.getElementById('ed-categoria')?.value || null;
+    // Se despesa, subconta vem do campo Casa/Clínica
+    let subconta_final = subconta;
+    if (tipo === 'despesa') {
+      const tipodespesa = document.getElementById('ed-tipodespesa')?.value || 'clinica';
+      subconta_final = tipodespesa === 'pessoal' ? 'prolabore' : subconta;
+    }
     const { error } = await sb.from('transactions').update({
-      tipo, descricao, valor, data_movimento, subconta,
+      tipo, descricao, valor, data_movimento, subconta: subconta_final,
       category_id: category_id || null,
       observacao: observacao || null
     }).eq('id', id);
