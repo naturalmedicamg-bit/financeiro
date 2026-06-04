@@ -1640,6 +1640,7 @@ function abrirEdicaoGrupo(ids, descricao, data) {
   document.getElementById('ed-valor').value = valorTotal;
   // Guardar IDs para deleção no save
   window._editandoGrupoIds = ids;
+  atualizarCatsEdicao();
   openModal('modal-editar');
 }
 
@@ -1661,6 +1662,7 @@ function atualizarCatsEdicao() {
 }
 
 function abrirEdicao(t) {
+  window._editandoGrupoIds = null; // ← garante que não herda estado de edição anterior
   document.getElementById('ed-id').value = t.id;
   document.getElementById('ed-tipo').value = t.tipo;
   document.getElementById('ed-desc').value = t.descricao;
