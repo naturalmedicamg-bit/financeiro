@@ -2708,14 +2708,17 @@ async function loadEnvelopes() {
   const cfg = getSubConfig();
 
   // Buscar metas do mês
-  const { data: metas } = await sb.from('subconta_metas')
+  const { data: metas, error: metasErr } = await sb.from('subconta_metas')
     .select('*').eq('mes', m).eq('ano', ano);
+  if (metasErr) console.warn('subconta_metas:', metasErr.message);
 
   // Buscar receitas do mês distribuídas nas subcontas
+  const ultimoDiaEnv = new Date(ano, m, 0).getDate();
   const { data: trans } = await sb.from('transactions')
     .select('valor,tipo,subconta')
+    .eq('user_id', USER.id)
     .gte('data_movimento', `${ano}-${String(m).padStart(2,'0')}-01`)
-    .lte('data_movimento', `${ano}-${String(m).padStart(2,'0')}-31`);
+    .lte('data_movimento', `${ano}-${String(m).padStart(2,'0')}-${String(ultimoDiaEnv).padStart(2,'0')}`);
 
   // Calcular saldo por subconta
   const saldos = {};
