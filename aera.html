@@ -2023,7 +2023,7 @@ function mostrarResultadosIA(transacoes) {
       </td>
       <td class="neg" style="font-weight:700">-${fmt(t.valor)}</td>
       <td>
-        <select class="form-control" id="ia-tipo-p-${i}" style="padding:5px 8px;font-size:12px;border-color:rgba(255,255,255,0.2)">
+        <select class="form-control" id="ia-tipo-p-${i}" style="padding:5px 8px;font-size:12px;border-color:rgba(255,255,255,0.2)" onchange="atualizarSubcontaPorTipo('p',${i},this.value)">
           <option value="pessoal" selected>👤 Pessoal</option>
           <option value="clinica">🏥 Clínica</option>
           <option value="receita">💰 Receita</option>
@@ -2049,7 +2049,7 @@ function mostrarResultadosIA(transacoes) {
       </td>
       <td class="neg" style="font-weight:700">-${fmt(t.valor)}</td>
       <td>
-        <select class="form-control" id="ia-tipo-c-${i}" style="padding:5px 8px;font-size:12px;border-color:var(--gold-border)">
+        <select class="form-control" id="ia-tipo-c-${i}" style="padding:5px 8px;font-size:12px;border-color:var(--gold-border)" onchange="atualizarSubcontaPorTipo('c',${i},this.value)">
           <option value="pessoal">👤 Pessoal</option>
           <option value="clinica" selected>🏥 Clínica</option>
           <option value="receita">💰 Receita</option>
@@ -2085,6 +2085,27 @@ function mostrarResultadosIA(transacoes) {
   document.getElementById('ia-step1').style.display = 'none';
   document.getElementById('ia-step2').style.display = 'block';
   toast(`${transacoes.length} transações classificadas! Revise e confirme.`);
+}
+
+function atualizarSubcontaPorTipo(grupo, i, tipo) {
+  const subSelect = document.getElementById(`ia-sub-${grupo}-${i}`);
+  if (!subSelect) return;
+
+  if (tipo === 'pessoal') {
+    // Gasto pessoal → Pró-labore
+    subSelect.value = 'prolabore';
+    subSelect.style.borderColor = 'var(--gold-border)';
+    subSelect.disabled = true;
+  } else if (tipo === 'receita') {
+    // Receita → não precisa de subconta (será distribuída)
+    subSelect.value = 'operacional';
+    subSelect.disabled = true;
+    subSelect.style.borderColor = 'var(--emerald)';
+  } else {
+    // Clínica → libera escolha
+    subSelect.disabled = false;
+    subSelect.style.borderColor = 'var(--slate)';
+  }
 }
 
 function cancelarIA() {
