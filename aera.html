@@ -1050,9 +1050,12 @@ tr:hover td { background: rgba(184,151,58,0.03); }
             <button class="btn btn-outline btn-sm" style="margin-top:10px;width:100%" onclick="abrirNovaCategoria('receita')">+ Nova categoria de receita</button>
           </div>
           <div>
-            <div style="font-size:12px;font-weight:700;color:var(--red);margin-bottom:10px">💸 Despesas</div>
-            <div id="cfg-cats-despesa"></div>
-            <button class="btn btn-outline btn-sm" style="margin-top:10px;width:100%" onclick="abrirNovaCategoria('despesa')">+ Nova categoria de despesa</button>
+            <div style="font-size:12px;font-weight:700;color:var(--red);margin-bottom:10px">🏠 Despesas Pessoais</div>
+            <div id="cfg-cats-despesa-pessoal"></div>
+            <button class="btn btn-outline btn-sm" style="margin-top:10px;width:100%" onclick="abrirNovaCategoria('despesa','pessoal')">+ Nova despesa pessoal</button>
+            <div style="font-size:12px;font-weight:700;color:var(--red);margin-top:20px;margin-bottom:10px">🏥 Despesas Clínica</div>
+            <div id="cfg-cats-despesa-clinica"></div>
+            <button class="btn btn-outline btn-sm" style="margin-top:10px;width:100%" onclick="abrirNovaCategoria('despesa','clinica')">+ Nova despesa clínica</button>
           </div>
         </div>
       </div>
@@ -1245,6 +1248,7 @@ tr:hover td { background: rgba(184,151,58,0.03); }
     </div>
     <input type="hidden" id="cfg-cat-id">
     <input type="hidden" id="cfg-cat-tipo">
+    <input type="hidden" id="cfg-cat-subtipo">
     <div class="form-group"><label>Nome</label><input type="text" id="cfg-cat-nome" class="form-control" placeholder="Ex: Consulta, Academia..."></div>
     <div style="display:flex;gap:10px">
       <button class="btn btn-gold" style="flex:1" onclick="salvarCfgCategoria()">Salvar</button>
@@ -2898,7 +2902,10 @@ async function ignorarPendente(id) {
 async function renderCfgCategorias() {
   await loadCats();
   const receitas = CATS.filter(c => c.tipo === 'receita');
-  const despesas = CATS.filter(c => c.tipo === 'despesa');
+  const despPessoal = CATS.filter(c => c.tipo === 'despesa' && c.subtipo === 'pessoal');
+  const despClinica = CATS.filter(c => c.tipo === 'despesa' && c.subtipo === 'clinica');
+  // legado sem subtipo cai em clínica
+  const despSemSub  = CATS.filter(c => c.tipo === 'despesa' && !c.subtipo);
 
   const renderList = (cats, containerId) => {
     const el = document.getElementById(containerId);
@@ -2907,29 +2914,32 @@ async function renderCfgCategorias() {
       <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:var(--ink-deep);border-radius:var(--radius-sm);margin-bottom:6px;border:1px solid var(--slate)">
         <span style="font-size:13px;font-weight:500">${c.nome}</span>
         <div style="display:flex;gap:4px">
-          <button onclick="abrirEditarCategoria('${c.id}','${c.nome}','${c.tipo}')" style="background:transparent;border:none;color:var(--fog);cursor:pointer;font-size:14px;padding:2px 6px" title="Editar">✏️</button>
+          <button onclick="abrirEditarCategoria('${c.id}','${c.nome}','${c.tipo}','${c.subtipo||''}')" style="background:transparent;border:none;color:var(--fog);cursor:pointer;font-size:14px;padding:2px 6px" title="Editar">✏️</button>
           <button onclick="excluirCategoriaRapido('${c.id}','${c.nome}')" style="background:transparent;border:none;color:var(--red);cursor:pointer;font-size:14px;padding:2px 6px;opacity:0.7" title="Excluir">🗑</button>
         </div>
       </div>`).join('') || `<div style="color:var(--fog);font-size:13px;padding:8px">Nenhuma categoria</div>`;
-
   };
 
   renderList(receitas, 'cfg-cats-receita');
-  renderList(despesas, 'cfg-cats-despesa');
+  renderList(despPessoal, 'cfg-cats-despesa-pessoal');
+  renderList([...despClinica, ...despSemSub], 'cfg-cats-despesa-clinica');
 }
 
-function abrirNovaCategoria(tipo) {
+function abrirNovaCategoria(tipo, subtipo) {
   document.getElementById('cfg-cat-id').value = '';
   document.getElementById('cfg-cat-tipo').value = tipo;
+  document.getElementById('cfg-cat-subtipo').value = subtipo || '';
   document.getElementById('cfg-cat-nome').value = '';
-  document.getElementById('cfg-cat-title').textContent = `Nova Categoria de ${tipo === 'receita' ? 'Receita' : 'Despesa'}`;
+  const titulo = tipo === 'receita' ? 'Nova Receita' : subtipo === 'pessoal' ? 'Nova Despesa Pessoal' : 'Nova Despesa Clínica';
+  document.getElementById('cfg-cat-title').textContent = titulo;
   document.getElementById('cfg-cat-del-btn').style.display = 'none';
   openModal('modal-cfg-categoria');
 }
 
-function abrirEditarCategoria(id, nome, tipo) {
+function abrirEditarCategoria(id, nome, tipo, subtipo) {
   document.getElementById('cfg-cat-id').value = id;
   document.getElementById('cfg-cat-tipo').value = tipo;
+  document.getElementById('cfg-cat-subtipo').value = subtipo || '';
   document.getElementById('cfg-cat-nome').value = nome;
   document.getElementById('cfg-cat-title').textContent = 'Editar Categoria';
   document.getElementById('cfg-cat-del-btn').style.display = 'inline-flex';
@@ -2940,14 +2950,15 @@ async function salvarCfgCategoria() {
   const id = document.getElementById('cfg-cat-id').value;
   const nome = document.getElementById('cfg-cat-nome').value.trim();
   const tipo = document.getElementById('cfg-cat-tipo').value;
+  const subtipo = document.getElementById('cfg-cat-subtipo').value || null;
   if (!nome) return toast('Informe o nome', 'error');
 
   if (id) {
-    const { error } = await sb.from('categories').update({ nome }).eq('id', id);
+    const { error } = await sb.from('categories').update({ nome, subtipo }).eq('id', id);
     if (error) return toast('Erro: ' + error.message, 'error');
     toast('Categoria atualizada!');
   } else {
-    const { error } = await sb.from('categories').insert({ user_id: USER.id, nome, tipo });
+    const { error } = await sb.from('categories').insert({ user_id: USER.id, nome, tipo, subtipo });
     if (error) return toast('Erro: ' + error.message, 'error');
     toast('Categoria criada!');
   }
