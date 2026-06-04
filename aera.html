@@ -1133,6 +1133,9 @@ tr:hover td { background: rgba(184,151,58,0.03); }
         <option value="despesa_clinica">🏥 Clínica</option>
       </select>
     </div>
+    <div class="form-group"><label>Categoria</label>
+      <select id="ep-categoria" class="form-control"></select>
+    </div>
     <div class="form-group" id="ep-subconta-wrap"><label>Subconta</label>
       <select id="ep-subconta" class="form-control">
         <option value="operacional">Operacional</option>
@@ -2748,8 +2751,18 @@ function abrirEditarPendente(t) {
   document.getElementById('ep-data').value = t.data_movimento;
   document.getElementById('ep-tipo').value = t.tipo_sugerido;
   document.getElementById('ep-subconta').value = t.subconta_sugerida || 'operacional';
+  // Popular categorias
+  const sel = document.getElementById('ep-categoria');
+  sel.innerHTML = '<option value="">Sem categoria</option>' + CATS.map(c=>`<option value="${c.id}">${c.nome}</option>`).join('');
   atualizarSubPendente();
   openModal('modal-editar-pendente');
+}
+
+function atualizarCatsPendente() {
+  const tipo = document.getElementById('ep-tipo').value;
+  const sel = document.getElementById('ep-categoria');
+  const filtro = tipo === 'receita' ? 'receita' : 'despesa';
+  sel.innerHTML = '<option value="">Sem categoria</option>' + CATS.filter(c=>c.tipo===filtro).map(c=>`<option value="${c.id}">${c.nome}</option>`).join('');
 }
 
 function atualizarSubPendente() {
@@ -2766,6 +2779,10 @@ function atualizarSubPendente() {
     wrap.style.display = 'block';
     subSelect.disabled = false;
   }
+  // Atualizar categorias conforme tipo
+  const filtro = tipo === 'receita' ? 'receita' : 'despesa';
+  const sel = document.getElementById('ep-categoria');
+  if (sel) sel.innerHTML = '<option value="">Sem categoria</option>' + CATS.filter(c=>c.tipo===filtro).map(c=>`<option value="${c.id}">${c.nome}</option>`).join('');
 }
 
 async function salvarPendente() {
@@ -2776,8 +2793,10 @@ async function salvarPendente() {
   const tipo_sugerido = document.getElementById('ep-tipo').value;
   const subconta_sugerida = document.getElementById('ep-subconta').value;
 
+  const categoria_id = document.getElementById('ep-categoria')?.value || null;
   const { error } = await sb.from('transacoes_pendentes').update({
-    descricao, valor, data_movimento, tipo_sugerido, subconta_sugerida
+    descricao, valor, data_movimento, tipo_sugerido, subconta_sugerida,
+    categoria_sugerida: categoria_id
   }).eq('id', id);
 
   if (error) return toast('Erro: ' + error.message, 'error');
@@ -2800,9 +2819,10 @@ async function lancarPendenteDoModal() {
   }).eq('id', id);
 
   // Lançar
+  const categoria_id = document.getElementById('ep-categoria')?.value || null;
   const t = { valor, descricao, data };
   const tipo_final = tipo_sugerido === 'despesa_pessoal' ? 'pessoal' : tipo_sugerido === 'despesa_clinica' ? 'clinica' : 'receita';
-  await lancarTransacao(tipo_final, t, null, subconta);
+  await lancarTransacao(tipo_final, t, categoria_id, subconta);
   await sb.from('transacoes_pendentes').update({ status: 'lancado' }).eq('id', id);
 
   toast('Lançado com sucesso!');
