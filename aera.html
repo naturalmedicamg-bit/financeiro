@@ -1572,10 +1572,12 @@ async function loadExtrato() {
   rows.forEach(t => {
     if (t.tipo === 'receita') {
       const chave = `${t.descricao}__${t.data_movimento}`;
-      if (!grupos[chave]) grupos[chave] = { ...t, valor_total: 0, ids: [], subcontas: [] };
+      if (!grupos[chave]) grupos[chave] = { ...t, valor_total: 0, ids: [], subcontas: [], category_id: t.category_id, categories: t.categories };
       grupos[chave].valor_total += Number(t.valor);
       grupos[chave].ids.push(t.id);
       grupos[chave].subcontas.push(cfg[t.subconta]?.nome || t.subconta);
+      // pegar category_id do primeiro registro que tiver
+      if (!grupos[chave].category_id && t.category_id) { grupos[chave].category_id = t.category_id; grupos[chave].categories = t.categories; }
     } else {
       despesas_e_avulsas.push(t);
     }
@@ -1603,7 +1605,7 @@ async function loadExtrato() {
       <td class="${isReceita?'pos':'neg'}" style="font-weight:700">${isReceita?'+':'-'}${fmt(valor)}</td>
       <td style="display:flex;gap:6px">
         ${t._agrupado 
-          ? `<button class="btn btn-ghost btn-xs" onclick="abrirEdicaoGrupo(${JSON.stringify(t.ids).replace(/"/g,'&quot;')}, '${t.descricao}', '${t.data_movimento}')">✏️</button>
+          ? `<button class="btn btn-ghost btn-xs" onclick="abrirEdicaoGrupo(${JSON.stringify(t.ids).replace(/"/g,'&quot;')}, '${t.descricao}', '${t.data_movimento}', ${t.valor_total}, '${t.category_id||''}')">✏️</button>
              <button class="btn btn-danger btn-xs" onclick="deletarGrupo(${JSON.stringify(t.ids).replace(/"/g,'&quot;')})">✕</button>`
           : `<button class="btn btn-ghost btn-xs" onclick="abrirEdicao(${JSON.stringify(t).replace(/"/g,'&quot;')})">✏️</button>
              <button class="btn btn-danger btn-xs" onclick="deletar('${t.id}')">✕</button>`
@@ -1620,21 +1622,17 @@ async function deletar(id) {
   loadExtrato(); loadDashboard();
 }
 
-function abrirEdicaoGrupo(ids, descricao, data) {
-  // Para receitas agrupadas, abre modal simplificado
-  // Permite editar descrição e data — redistribui automaticamente
-  document.getElementById('ed-id').value = ids[0]; // referência
+function abrirEdicaoGrupo(ids, descricao, data, valorTotal, categoryId) {
+  window._editandoGrupoIds = ids;
+  document.getElementById('ed-id').value = ids[0];
   document.getElementById('ed-tipo').value = 'receita';
   document.getElementById('ed-desc').value = descricao;
   document.getElementById('ed-data').value = data;
   document.getElementById('ed-subconta').value = 'operacional';
   document.getElementById('ed-obs').value = '';
-  // Calcular valor total do grupo
-  const valorTotal = window._ultimoGrupoValor || 0;
-  document.getElementById('ed-valor').value = valorTotal;
-  // Guardar IDs para deleção no save
-  window._editandoGrupoIds = ids;
+  document.getElementById('ed-valor').value = valorTotal || 0;
   atualizarCatsEdicao();
+  if (categoryId) document.getElementById('ed-categoria').value = categoryId;
   openModal('modal-editar');
 }
 
