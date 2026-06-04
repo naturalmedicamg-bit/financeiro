@@ -855,24 +855,14 @@ tr:hover td { background: rgba(184,151,58,0.03); }
 
       <!-- Etapa 1: Upload -->
       <div id="ia-step1">
-        <div class="grid g2" style="margin-bottom:20px">
-          <div class="card" style="border-color:var(--gold-border)">
-            <div style="font-size:12px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">📄 PDF do Extrato Bancário</div>
-            <p style="color:var(--fog);font-size:13px;margin-bottom:16px;line-height:1.6">A IA vai ler o extrato e separar automaticamente os gastos <strong style="color:var(--parchment)">pessoais</strong> dos gastos da <strong style="color:var(--gold)">clínica</strong>.</p>
-            <div style="border:2px dashed var(--gold-border);border-radius:var(--radius-sm);padding:28px;text-align:center;cursor:pointer;background:var(--gold-dim)" onclick="document.getElementById('up-pdf').click()">
-              <div style="font-size:28px;margin-bottom:6px">📁</div>
-              <div style="color:var(--fog);font-size:13px">Clique para selecionar PDF</div>
-              <input type="file" id="up-pdf" accept=".pdf" style="display:none" onchange="processarPDF(this)">
-            </div>
-          </div>
-          <div class="card">
-            <div style="font-size:12px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">📷 Comprovante / Recibo</div>
-            <p style="color:var(--fog);font-size:13px;margin-bottom:16px;line-height:1.6">Envie a foto de um comprovante. A IA extrai e classifica automaticamente.</p>
-            <div style="border:2px dashed var(--slate);border-radius:var(--radius-sm);padding:28px;text-align:center;cursor:pointer" onclick="document.getElementById('up-img').click()">
-              <div style="font-size:28px;margin-bottom:6px">🖼️</div>
-              <div style="color:var(--fog);font-size:13px">Clique para selecionar imagem</div>
-              <input type="file" id="up-img" accept="image/*" style="display:none" onchange="processarImagem(this)">
-            </div>
+        <div class="card" style="border-color:var(--gold-border);margin-bottom:20px">
+          <div style="font-size:12px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">📂 Extrato Bancário</div>
+          <p style="color:var(--fog);font-size:13px;margin-bottom:16px;line-height:1.6">A IA vai ler o extrato e separar automaticamente os gastos <strong style="color:var(--parchment)">pessoais</strong> dos gastos da <strong style="color:var(--gold)">clínica</strong>.</p>
+          <div style="border:2px dashed var(--gold-border);border-radius:var(--radius-sm);padding:32px;text-align:center;cursor:pointer;background:var(--gold-dim)" onclick="document.getElementById('up-extrato').click()">
+            <div style="font-size:32px;margin-bottom:8px">📁</div>
+            <div style="color:var(--white);font-size:14px;font-weight:500;margin-bottom:4px">Clique para selecionar arquivo</div>
+            <div style="color:var(--fog);font-size:12px">PDF, imagem (JPG, PNG, WEBP) ou print de extrato</div>
+            <input type="file" id="up-extrato" accept=".pdf,image/*" style="display:none" onchange="processarArquivoExtrato(this)">
           </div>
         </div>
 
@@ -1992,7 +1982,8 @@ async function chamarOpenAI(prompt, key) {
   return d.choices?.[0]?.message?.content || '';
 }
 
-async function processarPDF(input) {
+async function processarPDF(input) { return processarArquivoExtrato(input); }
+async function _processarPDF_legacy(input) {
   const file = input.files[0]; if (!file) return;
   const key = localStorage.getItem('openai_key');
   if (!key) return toast('Configure a chave da OpenAI primeiro', 'error');
@@ -2061,40 +2052,131 @@ ${texto.substring(0, 8000)}`;
   }
 }
 
-async function processarImagem(input) {
+async function processarArquivoExtrato(input) {
   const file = input.files[0]; if (!file) return;
+  input.value = ''; // reset para permitir reenvio do mesmo arquivo
   const key = localStorage.getItem('openai_key');
   if (!key) return toast('Configure a chave da OpenAI primeiro', 'error');
-  toast('Lendo comprovante com IA...');
 
-  const reader = new FileReader();
-  reader.onload = async (e) => {
-    const b64 = e.target.result.split(',')[1];
+  const isPDF = file.type === 'application/pdf';
+
+  if (isPDF) {
+    // Fluxo PDF: extrai texto e envia como texto
+    setLoading(true, 'Lendo o PDF...', `Arquivo: ${file.name}`, 10);
+    let texto = '';
     try {
-      const resp = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
-        body: JSON.stringify({
-          model: 'gpt-4o',
-          messages: [{ role: 'user', content: [
-            { type: 'text', text: `Extraia as informações deste comprovante de pagamento de um médico.
-Retorne APENAS JSON: {"transacoes":[{"data":"YYYY-MM-DD","descricao":"nome do estabelecimento","valor":0.00,"tipo":"despesa_pessoal ou despesa_clinica","categoria":"categoria adequada","subconta":"operacional"}]}
-Se for gasto pessoal: tipo=despesa_pessoal, subconta=prolabore
-Se for gasto da clínica: tipo=despesa_clinica, subconta=operacional` },
-            { type: 'image_url', image_url: { url: `data:${file.type};base64,${b64}` } }
-          ]}],
-          max_tokens: 500
-        })
-      });
-      const d = await resp.json();
-      if (d.error) return toast('Erro OpenAI: ' + d.error.message, 'error');
-      const text = d.choices?.[0]?.message?.content || '';
-      const parsed = JSON.parse(text.replace(/\`\`\`json|\`\`\`/g,'').trim());
-      mostrarResultadosIA(parsed.transacoes || []);
-    } catch(e) { toast('Erro: ' + e.message, 'error'); }
-  };
-  reader.readAsDataURL(file);
+      texto = await extrairTextoPDF(file);
+      if (!texto.trim()) {
+        setLoading(false);
+        return toast('PDF sem texto detectável. Tente enviar como imagem.', 'error');
+      }
+    } catch(e) {
+      setLoading(false);
+      return toast('Erro ao ler PDF: ' + e.message, 'error');
+    }
+    await _processarTextoExtrato(texto, key);
+  } else {
+    // Fluxo imagem: envia como base64 vision
+    setLoading(true, 'Lendo imagem...', `Arquivo: ${file.name}`, 10);
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const b64 = e.target.result.split(',')[1];
+      await _processarImagemExtrato(b64, file.type, key);
+    };
+    reader.readAsDataURL(file);
+  }
 }
+
+async function _processarTextoExtrato(texto, key) {
+  const catPessoais = CATS.filter(c=>c.tipo==='despesa').map(c=>c.nome).join(', ');
+  const prompt = `Você é um parser de extratos bancários. Responda SOMENTE com JSON puro, sem markdown, sem explicações, sem texto antes ou depois.
+
+Analise o extrato de um médico PJ brasileiro que mistura gastos pessoais e da clínica.
+
+Formato obrigatório da resposta (apenas isso, nada mais):
+{"transacoes":[{"data":"YYYY-MM-DD","descricao":"texto curto","valor":0.00,"tipo":"receita","categoria":"Consulta","subconta":"operacional"}]}
+
+Valores válidos para "tipo": receita, despesa_pessoal, despesa_clinica
+Valores válidos para "subconta": operacional, impostos, prolabore, reserva, antecipacao
+
+Regras:
+- Créditos/recebimentos de pacientes/convênios = tipo:receita, subconta:operacional
+- Supermercado/restaurante/lazer/pessoal = tipo:despesa_pessoal, subconta:prolabore
+- Aluguel sala/material clínico/secretária = tipo:despesa_clinica, subconta:operacional
+- DARF/DAS/impostos = tipo:despesa_clinica, subconta:impostos
+- Aplicações/poupança = tipo:despesa_clinica, subconta:reserva
+
+Extrato:
+${texto.substring(0, 8000)}`;
+
+  setLoading(true, 'Enviando para a IA...', 'GPT-4o analisando o extrato', 40);
+  try {
+    setLoading(true, 'IA classificando transações...', 'Separando pessoal × clínica × receitas', 70);
+    const respText = await chamarOpenAI(prompt, key);
+    let clean = respText.trim().replace(/^```json\s*/i,'').replace(/^```\s*/i,'').replace(/\s*```$/i,'').trim();
+    const jsonMatch = clean.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('Nenhum JSON encontrado na resposta da IA');
+    const parsed = JSON.parse(jsonMatch[0]);
+    setLoading(true, 'Concluído!', 'Pronto para revisão', 100);
+    await new Promise(r => setTimeout(r, 600));
+    setLoading(false);
+    mostrarResultadosIA(parsed.transacoes || []);
+  } catch(e) {
+    setLoading(false);
+    toast('Erro ao processar: ' + e.message, 'error');
+    console.error(e);
+  }
+}
+
+async function _processarImagemExtrato(b64, mimeType, key) {
+  setLoading(true, 'Enviando imagem para a IA...', 'GPT-4o lendo o extrato', 40);
+  try {
+    setLoading(true, 'IA classificando transações...', 'Separando pessoal × clínica × receitas', 70);
+    const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        max_tokens: 4000,
+        messages: [{ role: 'user', content: [
+          { type: 'text', text: `Você é um parser de extratos bancários. Responda SOMENTE com JSON puro, sem markdown, sem explicações.
+
+Analise o extrato de um médico PJ brasileiro. Extraia TODAS as transações visíveis.
+
+Formato obrigatório (apenas isso):
+{"transacoes":[{"data":"YYYY-MM-DD","descricao":"texto curto","valor":0.00,"tipo":"receita","categoria":"Consulta","subconta":"operacional"}]}
+
+Valores válidos para "tipo": receita, despesa_pessoal, despesa_clinica
+Valores válidos para "subconta": operacional, impostos, prolabore, reserva, antecipacao
+
+Regras:
+- Créditos/recebimentos = tipo:receita, subconta:operacional
+- Gastos pessoais (mercado/restaurante/lazer) = tipo:despesa_pessoal, subconta:prolabore
+- Gastos clínica (aluguel/material/secretária) = tipo:despesa_clinica, subconta:operacional
+- Impostos/DARF/DAS = tipo:despesa_clinica, subconta:impostos` },
+          { type: 'image_url', image_url: { url: `data:${mimeType};base64,${b64}`, detail: 'high' } }
+        ]}]
+      })
+    });
+    const d = await resp.json();
+    if (d.error) { setLoading(false); return toast('Erro OpenAI: ' + d.error.message, 'error'); }
+    const text = d.choices?.[0]?.message?.content || '';
+    let clean = text.trim().replace(/^```json\s*/i,'').replace(/^```\s*/i,'').replace(/\s*```$/i,'').trim();
+    const jsonMatch = clean.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('Nenhum JSON na resposta');
+    const parsed = JSON.parse(jsonMatch[0]);
+    setLoading(true, 'Concluído!', 'Pronto para revisão', 100);
+    await new Promise(r => setTimeout(r, 600));
+    setLoading(false);
+    mostrarResultadosIA(parsed.transacoes || []);
+  } catch(e) {
+    setLoading(false);
+    toast('Erro: ' + e.message, 'error');
+    console.error(e);
+  }
+}
+
+async function processarImagem(input) { return processarArquivoExtrato(input); }
 
 function mostrarResultadosIA(transacoes) {
   if (!transacoes.length) return toast('Nenhuma transação encontrada', 'error');
