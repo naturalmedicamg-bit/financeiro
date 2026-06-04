@@ -1019,11 +1019,15 @@ tr:hover td { background: rgba(184,151,58,0.03); }
     <div class="page" id="page-config">
       <div class="page-title" style="margin-bottom:24px">Configurações</div>
 
-      <div class="card-gold" style="max-width:540px;margin-bottom:20px">
-        <div style="font-size:11px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:2px;margin-bottom:16px">⊡ Distribuição das Subcontas</div>
-        <p style="font-size:13px;color:var(--fog);margin-bottom:16px">A cada entrada, o sistema distribui automaticamente nas subcontas conforme os percentuais abaixo. A soma deve ser 100%.</p>
+      <div class="card-gold" style="max-width:600px;margin-bottom:20px">
+        <div style="font-size:11px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:2px;margin-bottom:6px">⊡ Subcontas Inteligentes</div>
+        <p style="font-size:13px;color:var(--fog);margin-bottom:16px">Personalize as subcontas — nome, ícone e percentual. A soma deve ser 100%. Ao salvar, todas as receitas existentes são redistribuídas automaticamente.</p>
         <div id="config-subcontas-form"></div>
-        <button class="btn btn-gold btn-sm" style="margin-top:16px" onclick="salvarConfig()">Salvar Configurações</button>
+        <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
+          <button class="btn btn-gold btn-sm" onclick="salvarConfig()">✓ Salvar e Redistribuir</button>
+          <button class="btn btn-outline btn-sm" onclick="adicionarSubcontaForm()">+ Nova Subconta</button>
+        </div>
+        <div style="font-size:12px;color:var(--fog);margin-top:10px" id="cfg-soma-info">Soma atual: 100%</div>
       </div>
 
       <div class="card" style="max-width:540px;margin-bottom:20px">
@@ -2309,27 +2313,108 @@ async function deletarMeta(id) {
 // ══════════════════════════════
 function buildConfigSubcontasForm() {
   const cfg = getSubConfig();
-  document.getElementById('config-subcontas-form').innerHTML = Object.entries(cfg).map(([key,sub])=>`
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
-      <span style="font-size:20px;width:28px">${sub.icon}</span>
-      <div style="flex:1;font-size:14px;font-weight:500">${sub.nome}</div>
-      <div style="display:flex;align-items:center;gap:6px">
-        <input type="number" id="cfg-sub-${key}" class="form-control" value="${sub.pct}" min="0" max="100" style="width:70px;text-align:center;padding:8px">
-        <span style="color:var(--fog)">%</span>
+  const container = document.getElementById('config-subcontas-form');
+  container.innerHTML = Object.entries(cfg).map(([key, sub]) => `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;background:var(--ink-deep);padding:10px 12px;border-radius:var(--radius-sm);border:1px solid var(--slate)" id="cfg-row-${key}">
+      <input type="text" id="cfg-icon-${key}" value="${sub.icon}" 
+        style="width:42px;text-align:center;background:var(--ink-card);border:1px solid var(--slate);border-radius:6px;padding:6px;font-size:18px;color:var(--white)">
+      <input type="text" id="cfg-nome-${key}" value="${sub.nome}" 
+        style="flex:1;background:var(--ink-card);border:1px solid var(--slate);border-radius:6px;padding:8px 10px;color:var(--white);font-family:inherit;font-size:13px;font-weight:500">
+      <div style="display:flex;align-items:center;gap:4px">
+        <input type="number" id="cfg-pct-${key}" value="${sub.pct}" min="0" max="100"
+          style="width:60px;text-align:center;background:var(--ink-card);border:1px solid var(--gold-border);border-radius:6px;padding:8px;color:var(--gold);font-family:inherit;font-size:14px;font-weight:700"
+          oninput="atualizarSoma()">
+        <span style="color:var(--fog);font-size:13px">%</span>
       </div>
-    </div>`).join('') + `<div style="font-size:12px;color:var(--fog);margin-top:8px">A soma dos percentuais deve ser 100%.</div>`;
+      <button onclick="removerSubconta('${key}')" 
+        style="width:30px;height:30px;background:var(--red-dim);border:1px solid rgba(224,82,82,0.25);border-radius:6px;color:var(--red);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center"
+        title="Remover subconta">✕</button>
+    </div>`).join('');
+  atualizarSoma();
+}
+
+function atualizarSoma() {
+  const cfg = getSubConfig();
+  let soma = 0;
+  Object.keys(cfg).forEach(key => {
+    const el = document.getElementById(`cfg-pct-${key}`);
+    if (el) soma += parseInt(el.value) || 0;
+  });
+  // Incluir novas subcontas adicionadas
+  document.querySelectorAll('[id^="cfg-pct-nova-"]').forEach(el => {
+    soma += parseInt(el.value) || 0;
+  });
+  const info = document.getElementById('cfg-soma-info');
+  if (info) {
+    info.textContent = `Soma atual: ${soma}%`;
+    info.style.color = soma === 100 ? 'var(--emerald)' : soma > 100 ? 'var(--red)' : 'var(--gold)';
+  }
+}
+
+let novaSubcontaCount = 0;
+function adicionarSubcontaForm() {
+  const id = `nova-${++novaSubcontaCount}`;
+  const container = document.getElementById('config-subcontas-form');
+  const div = document.createElement('div');
+  div.id = `cfg-row-${id}`;
+  div.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:10px;background:var(--ink-deep);padding:10px 12px;border-radius:var(--radius-sm);border:1px solid var(--gold-border)';
+  div.innerHTML = `
+    <input type="text" id="cfg-icon-${id}" value="💡" 
+      style="width:42px;text-align:center;background:var(--ink-card);border:1px solid var(--slate);border-radius:6px;padding:6px;font-size:18px;color:var(--white)">
+    <input type="text" id="cfg-nome-${id}" placeholder="Nome da subconta"
+      style="flex:1;background:var(--ink-card);border:1px solid var(--slate);border-radius:6px;padding:8px 10px;color:var(--white);font-family:inherit;font-size:13px;font-weight:500">
+    <div style="display:flex;align-items:center;gap:4px">
+      <input type="number" id="cfg-pct-${id}" value="0" min="0" max="100"
+        style="width:60px;text-align:center;background:var(--ink-card);border:1px solid var(--gold-border);border-radius:6px;padding:8px;color:var(--gold);font-family:inherit;font-size:14px;font-weight:700"
+        oninput="atualizarSoma()">
+      <span style="color:var(--fog);font-size:13px">%</span>
+    </div>
+    <button onclick="this.parentElement.remove();atualizarSoma()"
+      style="width:30px;height:30px;background:var(--red-dim);border:1px solid rgba(224,82,82,0.25);border-radius:6px;color:var(--red);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center">✕</button>`;
+  container.appendChild(div);
+  atualizarSoma();
+}
+
+function removerSubconta(key) {
+  const cfg = getSubConfig();
+  if (Object.keys(cfg).length <= 2) return toast('Mínimo de 2 subcontas', 'error');
+  if (!confirm(`Remover a subconta "${cfg[key]?.nome}"? As transações existentes serão redistribuídas nas demais.`)) return;
+  const row = document.getElementById(`cfg-row-${key}`);
+  if (row) row.remove();
+  atualizarSoma();
 }
 
 async function salvarConfig() {
   const cfg = getSubConfig();
   let total = 0;
   const novo = {};
-  Object.entries(cfg).forEach(([key,sub]) => {
-    const pct = parseInt(document.getElementById(`cfg-sub-${key}`)?.value)||0;
+
+  // Subcontas existentes (editadas ou mantidas — só as que ainda têm row no DOM)
+  Object.entries(cfg).forEach(([key, sub]) => {
+    const row = document.getElementById(`cfg-row-${key}`);
+    if (!row) return; // foi removida
+    const pct = parseInt(document.getElementById(`cfg-pct-${key}`)?.value) || 0;
+    const nome = document.getElementById(`cfg-nome-${key}`)?.value.trim() || sub.nome;
+    const icon = document.getElementById(`cfg-icon-${key}`)?.value.trim() || sub.icon;
     total += pct;
-    novo[key] = { ...sub, pct };
+    novo[key] = { ...sub, nome, icon, pct };
   });
-  if(total !== 100) return toast(`A soma é ${total}%. Precisa ser 100%.`,'error');
+
+  // Novas subcontas adicionadas
+  document.querySelectorAll('[id^="cfg-row-nova-"]').forEach(row => {
+    const id = row.id.replace('cfg-row-', '');
+    const nome = document.getElementById(`cfg-nome-${id}`)?.value.trim();
+    const icon = document.getElementById(`cfg-icon-${id}`)?.value.trim() || '💡';
+    const pct = parseInt(document.getElementById(`cfg-pct-${id}`)?.value) || 0;
+    if (!nome) return;
+    // Gerar key a partir do nome
+    const key = nome.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,'_').replace(/[^a-z_]/g,'');
+    total += pct;
+    novo[key] = { nome, icon, pct, color: '#8A96A3' };
+  });
+
+  if (total !== 100) return toast(`A soma é ${total}%. Precisa ser 100%.`, 'error');
+  if (Object.keys(novo).length < 2) return toast('Mínimo de 2 subcontas', 'error');
 
   // Salvar novos percentuais
   localStorage.setItem('aera_subcontas', JSON.stringify(novo));
