@@ -1607,7 +1607,7 @@ async function loadExtrato() {
       <td>${t._agrupado 
         ? `<span class="badge b-green" style="font-size:10px">Distribuído em subcontas</span>`
         : t.subconta ? `<span class="badge ${subBadgeClass(t.subconta)}">${cfg[t.subconta]?.nome||t.subconta}</span>` : '—'}</td>
-      <td>${t.tipo === 'receita' ? '—' : t.subconta === 'prolabore' ? `<span class="badge b-amber" style="font-size:10px">Casa</span>` : `<span class="badge b-purple" style="font-size:10px">Clínica</span>`}</td>
+      <td>${t.tipo === 'receita' ? `<span class="badge b-purple" style="font-size:10px">Clínica</span>` : t.subconta === 'prolabore' ? `<span class="badge b-amber" style="font-size:10px">Casa</span>` : `<span class="badge b-purple" style="font-size:10px">Clínica</span>`}</td>
       <td class="${isReceita?'pos':'neg'}" style="font-weight:700">${isReceita?'+':'-'}${fmt(valor)}</td>
       <td style="display:flex;gap:6px">
         ${t._agrupado 
