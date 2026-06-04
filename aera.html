@@ -999,7 +999,7 @@ tr:hover td { background: rgba(184,151,58,0.03); }
       <div class="card">
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Data</th><th>Descrição</th><th>Tipo Sugerido</th><th>Subconta</th><th>Valor</th><th>Ações</th></tr></thead>
+            <thead><tr><th>Data</th><th>Descrição</th><th>Tipo</th><th>Subconta</th><th>Valor</th><th>Ações</th></tr></thead>
             <tbody id="tb-pendentes"></tbody>
           </table>
         </div>
@@ -1106,6 +1106,42 @@ tr:hover td { background: rgba(184,151,58,0.03); }
     </div>
     <div class="form-group"><label>Data Alvo</label><input type="date" id="m-data" class="form-control"></div>
     <button class="btn btn-gold" onclick="salvarMeta()">Salvar</button>
+  </div>
+</div>
+
+<!-- Modal Editar Pendente -->
+<div class="modal-overlay" id="modal-editar-pendente">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Editar Transação Pendente</div>
+      <button class="modal-close" onclick="closeModal('modal-editar-pendente')">×</button>
+    </div>
+    <input type="hidden" id="ep-id">
+    <div class="form-group"><label>Descrição</label><input type="text" id="ep-desc" class="form-control"></div>
+    <div class="form-row">
+      <div class="form-group"><label>Valor (R$)</label><input type="number" id="ep-valor" class="form-control" step="0.01"></div>
+      <div class="form-group"><label>Data</label><input type="date" id="ep-data" class="form-control"></div>
+    </div>
+    <div class="form-group"><label>Tipo</label>
+      <select id="ep-tipo" class="form-control" onchange="atualizarSubPendente()">
+        <option value="receita">💰 Receita</option>
+        <option value="despesa_pessoal">👤 Pessoal (Pró-labore)</option>
+        <option value="despesa_clinica">🏥 Clínica</option>
+      </select>
+    </div>
+    <div class="form-group" id="ep-subconta-wrap"><label>Subconta</label>
+      <select id="ep-subconta" class="form-control">
+        <option value="operacional">Operacional</option>
+        <option value="impostos">Impostos</option>
+        <option value="prolabore">Pró-labore</option>
+        <option value="reserva">Reserva</option>
+        <option value="antecipacao">Antecipação</option>
+      </select>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:8px">
+      <button class="btn btn-gold" style="flex:1" onclick="salvarPendente()">Salvar</button>
+      <button class="btn btn-outline btn-sm" onclick="lancarPendenteDoModal()">✓ Salvar e Lançar</button>
+    </div>
   </div>
 </div>
 
@@ -2586,8 +2622,9 @@ async function loadPendentes() {
       <td>${t.subconta_sugerida?`<span class="badge ${subBadgeClass(t.subconta_sugerida)}">${cfg[t.subconta_sugerida]?.nome||t.subconta_sugerida}</span>`:'—'}</td>
       <td style="font-weight:700;color:var(--fog)">${fmt(t.valor)}</td>
       <td style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-xs" onclick="abrirEditarPendente(${JSON.stringify(t).replace(/"/g,'&quot;')})">✏️</button>
         <button class="btn btn-gold btn-xs" onclick="lancarPendente('${t.id}','${t.tipo_sugerido}',${t.valor},'${t.descricao}','${t.data_movimento}','${t.subconta_sugerida}')">✓ Lançar</button>
-        <button class="btn btn-danger btn-xs" onclick="ignorarPendente('${t.id}')">✕ Ignorar</button>
+        <button class="btn btn-danger btn-xs" onclick="ignorarPendente('${t.id}')">✕</button>
       </td>
     </tr>`).join('') 
   : '<tr><td colspan="6" style="text-align:center;color:var(--fog);padding:32px">Nenhuma transação pendente 🎉</td></tr>';
@@ -2615,6 +2652,76 @@ async function lancarPendente(id, tipo_sugerido, valor, descricao, data, subcont
   );
   await sb.from('transacoes_pendentes').update({ status: 'lancado' }).eq('id', id);
   toast('Lançado com sucesso!');
+  loadPendentes();
+  loadDashboard();
+}
+
+function abrirEditarPendente(t) {
+  document.getElementById('ep-id').value = t.id;
+  document.getElementById('ep-desc').value = t.descricao;
+  document.getElementById('ep-valor').value = t.valor;
+  document.getElementById('ep-data').value = t.data_movimento;
+  document.getElementById('ep-tipo').value = t.tipo_sugerido;
+  document.getElementById('ep-subconta').value = t.subconta_sugerida || 'operacional';
+  atualizarSubPendente();
+  openModal('modal-editar-pendente');
+}
+
+function atualizarSubPendente() {
+  const tipo = document.getElementById('ep-tipo').value;
+  const subSelect = document.getElementById('ep-subconta');
+  const wrap = document.getElementById('ep-subconta-wrap');
+  if (tipo === 'receita') {
+    wrap.style.display = 'none';
+  } else if (tipo === 'despesa_pessoal') {
+    wrap.style.display = 'block';
+    subSelect.value = 'prolabore';
+    subSelect.disabled = true;
+  } else {
+    wrap.style.display = 'block';
+    subSelect.disabled = false;
+  }
+}
+
+async function salvarPendente() {
+  const id = document.getElementById('ep-id').value;
+  const descricao = document.getElementById('ep-desc').value.trim();
+  const valor = parseFloat(document.getElementById('ep-valor').value);
+  const data_movimento = document.getElementById('ep-data').value;
+  const tipo_sugerido = document.getElementById('ep-tipo').value;
+  const subconta_sugerida = document.getElementById('ep-subconta').value;
+
+  const { error } = await sb.from('transacoes_pendentes').update({
+    descricao, valor, data_movimento, tipo_sugerido, subconta_sugerida
+  }).eq('id', id);
+
+  if (error) return toast('Erro: ' + error.message, 'error');
+  toast('Pendente atualizado!');
+  closeModal('modal-editar-pendente');
+  loadPendentes();
+}
+
+async function lancarPendenteDoModal() {
+  const id = document.getElementById('ep-id').value;
+  const descricao = document.getElementById('ep-desc').value.trim();
+  const valor = parseFloat(document.getElementById('ep-valor').value);
+  const data = document.getElementById('ep-data').value;
+  const tipo_sugerido = document.getElementById('ep-tipo').value;
+  const subconta = document.getElementById('ep-subconta').value;
+
+  // Salvar primeiro
+  await sb.from('transacoes_pendentes').update({
+    descricao, valor, data_movimento: data, tipo_sugerido, subconta_sugerida: subconta
+  }).eq('id', id);
+
+  // Lançar
+  const t = { valor, descricao, data };
+  const tipo_final = tipo_sugerido === 'despesa_pessoal' ? 'pessoal' : tipo_sugerido === 'despesa_clinica' ? 'clinica' : 'receita';
+  await lancarTransacao(tipo_final, t, null, subconta);
+  await sb.from('transacoes_pendentes').update({ status: 'lancado' }).eq('id', id);
+
+  toast('Lançado com sucesso!');
+  closeModal('modal-editar-pendente');
   loadPendentes();
   loadDashboard();
 }
