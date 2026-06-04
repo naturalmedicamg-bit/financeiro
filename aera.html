@@ -1161,7 +1161,7 @@ tr:hover td { background: rgba(184,151,58,0.03); }
     </div>
     <input type="hidden" id="ed-id">
     <div class="form-group"><label>Tipo</label>
-      <select id="ed-tipo" class="form-control">
+      <select id="ed-tipo" class="form-control" onchange="atualizarCatsEdicao()">
         <option value="receita">Receita (Entrada)</option>
         <option value="despesa">Despesa (Saída)</option>
       </select>
@@ -1170,6 +1170,9 @@ tr:hover td { background: rgba(184,151,58,0.03); }
     <div class="form-row">
       <div class="form-group"><label>Valor (R$)</label><input type="number" id="ed-valor" class="form-control" step="0.01"></div>
       <div class="form-group"><label>Data</label><input type="date" id="ed-data" class="form-control"></div>
+    </div>
+    <div class="form-group"><label>Categoria</label>
+      <select id="ed-categoria" class="form-control"></select>
     </div>
     <div class="form-group"><label>Subconta</label>
       <select id="ed-subconta" class="form-control">
@@ -1614,6 +1617,14 @@ async function deletarGrupo(ids) {
   loadExtrato(); loadDashboard();
 }
 
+function atualizarCatsEdicao() {
+  const tipo = document.getElementById('ed-tipo').value;
+  const sel = document.getElementById('ed-categoria');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">Sem categoria</option>' + 
+    CATS.filter(c => c.tipo === tipo).map(c => `<option value="${c.id}">${c.nome}</option>`).join('');
+}
+
 function abrirEdicao(t) {
   document.getElementById('ed-id').value = t.id;
   document.getElementById('ed-tipo').value = t.tipo;
@@ -1622,6 +1633,9 @@ function abrirEdicao(t) {
   document.getElementById('ed-data').value = t.data_movimento;
   document.getElementById('ed-subconta').value = t.subconta || 'operacional';
   document.getElementById('ed-obs').value = t.observacao || '';
+  // Popular e selecionar categoria
+  atualizarCatsEdicao();
+  if (t.category_id) document.getElementById('ed-categoria').value = t.category_id;
   openModal('modal-editar');
 }
 
