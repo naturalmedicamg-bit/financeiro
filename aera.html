@@ -2198,13 +2198,32 @@ Regras:
 
 async function processarImagem(input) { return processarArquivoExtrato(input); }
 
-function mostrarResultadosIA(transacoes) {
+async function mostrarResultadosIA(transacoes) {
   if (!transacoes.length) return toast('Nenhuma transação encontrada', 'error');
 
   const cfg = getSubConfig();
   const receitas = transacoes.filter(t => t.tipo === 'receita');
   const pessoais = transacoes.filter(t => t.tipo === 'despesa_pessoal');
   const clinica  = transacoes.filter(t => t.tipo === 'despesa_clinica');
+
+  // Checar duplicatas no banco antes de exibir
+  const datas = transacoes.map(t => t.data).filter(Boolean).sort();
+  const { data: existentes } = await sb.from('transactions')
+    .select('descricao, valor, data_movimento')
+    .eq('user_id', USER.id)
+    .gte('data_movimento', datas[0])
+    .lte('data_movimento', datas[datas.length - 1]);
+
+  const isDuplicado = (descricao, valor, data) =>
+    (existentes||[]).some(e =>
+      e.descricao === descricao &&
+      Math.abs(Number(e.valor) - Number(valor)) < 0.01 &&
+      e.data_movimento === data
+    );
+
+  window._isDuplicado = isDuplicado;
+  const totalDup = transacoes.filter(t => isDuplicado(t.descricao, t.valor, t.data)).length;
+  if (totalDup > 0) toast(`⚠️ ${totalDup} item(ns) já lançados anteriormente — marcados para revisão.`, 'warning');
 
   // Atualizar contadores
   document.getElementById('ia-count-pessoal').textContent = `${pessoais.length} pessoais`;
@@ -2216,8 +2235,8 @@ function mostrarResultadosIA(transacoes) {
 
   // Tabela pessoais
   document.getElementById('tb-ia-pessoal').innerHTML = pessoais.length ? pessoais.map((t,i) => `
-    <tr id="ia-row-p-${i}">
-      <td>${fmtDate(t.data)}</td>
+    <tr id="ia-row-p-${i}" style="${isDuplicado(t.descricao, t.valor, t.data) ? 'opacity:0.5;background:rgba(224,82,82,0.05)' : ''}">
+      <td>${fmtDate(t.data)}${isDuplicado(t.descricao, t.valor, t.data) ? ' <span style="color:var(--red);font-size:10px">já lançado</span>' : ''}</td>
       <td style="font-weight:500">${t.descricao}</td>
       <td>
         <select class="form-control" id="ia-cat-p-${i}" style="padding:5px 8px;font-size:12px">
@@ -2242,8 +2261,8 @@ function mostrarResultadosIA(transacoes) {
 
   // Tabela clínica
   document.getElementById('tb-ia-clinica').innerHTML = clinica.length ? clinica.map((t,i) => `
-    <tr id="ia-row-c-${i}">
-      <td>${fmtDate(t.data)}</td>
+    <tr id="ia-row-c-${i}" style="${isDuplicado(t.descricao, t.valor, t.data) ? 'opacity:0.5;background:rgba(224,82,82,0.05)' : ''}">
+      <td>${fmtDate(t.data)}${isDuplicado(t.descricao, t.valor, t.data) ? ' <span style="color:var(--red);font-size:10px">já lançado</span>' : ''}</td>
       <td style="font-weight:500">${t.descricao}</td>
       <td>
         <select class="form-control" id="ia-cat-c-${i}" style="padding:5px 8px;font-size:12px">
@@ -2268,8 +2287,8 @@ function mostrarResultadosIA(transacoes) {
 
   // Tabela receitas
   document.getElementById('tb-ia-receitas').innerHTML = receitas.length ? receitas.map((t,i) => `
-    <tr>
-      <td>${fmtDate(t.data)}</td>
+    <tr style="${isDuplicado(t.descricao, t.valor, t.data) ? 'opacity:0.5;background:rgba(224,82,82,0.05)' : ''}">
+      <td>${fmtDate(t.data)}${isDuplicado(t.descricao, t.valor, t.data) ? ' <span style="color:var(--red);font-size:10px">já lançado</span>' : ''}</td>
       <td style="font-weight:500">${t.descricao}</td>
       <td>
         <select class="form-control" id="ia-cat-r-${i}" style="padding:5px 8px;font-size:12px">
@@ -2344,22 +2363,45 @@ async function lancarTransacao(tipo_final, t, catId, sub) {
 }
 
 async function confirmarIA() {
-  let ok = 0;
+  let ok = 0, duplicados = 0;
+
+  // Buscar todas as transações existentes para checar duplicatas
+  const datas = [...window._iaReceitas||[], ...window._iaPessoais||[], ...window._iaClinica||[]]
+    .map(t => t.data).filter(Boolean);
+  const dataMin = datas.sort()[0];
+  const dataMax = datas.sort().slice(-1)[0];
+
+  const { data: existentes } = await sb.from('transactions')
+    .select('descricao, valor, data_movimento, tipo')
+    .eq('user_id', USER.id)
+    .gte('data_movimento', dataMin)
+    .lte('data_movimento', dataMax);
+
+  // Chave de deduplicação: descricao + valor + data
+  const jaExiste = (descricao, valor, data) => {
+    return (existentes||[]).some(e =>
+      e.descricao === descricao &&
+      Math.abs(Number(e.valor) - Number(valor)) < 0.01 &&
+      e.data_movimento === data
+    );
+  };
 
   // Receitas
   for (let i = 0; i < (window._iaReceitas||[]).length; i++) {
     const t = window._iaReceitas[i];
     if (!document.getElementById(`ia-chk-r-${i}`)?.checked) continue;
+    if (jaExiste(t.descricao, t.valor, t.data)) { duplicados++; continue; }
     const catId = document.getElementById(`ia-cat-r-${i}`)?.value || null;
     const tipo_final = document.getElementById(`ia-tipo-r-${i}`)?.value || 'receita';
     await lancarTransacao(tipo_final, t, catId, null);
     ok++;
   }
 
-  // Pessoais — respeitando tipo selecionado
+  // Pessoais
   for (let i = 0; i < (window._iaPessoais||[]).length; i++) {
     const t = window._iaPessoais[i];
     if (!document.getElementById(`ia-chk-p-${i}`)?.checked) continue;
+    if (jaExiste(t.descricao, t.valor, t.data)) { duplicados++; continue; }
     const catId = document.getElementById(`ia-cat-p-${i}`)?.value || null;
     const tipo_final = document.getElementById(`ia-tipo-p-${i}`)?.value || 'pessoal';
     const sub = document.getElementById(`ia-sub-p-${i}`)?.value || 'prolabore';
@@ -2367,10 +2409,11 @@ async function confirmarIA() {
     ok++;
   }
 
-  // Clínica — respeitando tipo selecionado
+  // Clínica
   for (let i = 0; i < (window._iaClinica||[]).length; i++) {
     const t = window._iaClinica[i];
     if (!document.getElementById(`ia-chk-c-${i}`)?.checked) continue;
+    if (jaExiste(t.descricao, t.valor, t.data)) { duplicados++; continue; }
     const catId = document.getElementById(`ia-cat-c-${i}`)?.value || null;
     const sub = document.getElementById(`ia-sub-c-${i}`)?.value || 'operacional';
     const tipo_final = document.getElementById(`ia-tipo-c-${i}`)?.value || 'clinica';
@@ -2416,8 +2459,9 @@ async function confirmarIA() {
   }
 
   let msg = `✓ ${ok} transações lançadas!`;
+  if (duplicados > 0) msg += ` ${duplicados} já existiam e foram ignoradas.`;
   if (pendentes > 0) msg += ` ${pendentes} salvas como pendentes.`;
-  toast(msg);
+  toast(msg, duplicados > 0 ? 'warning' : 'success');
   cancelarIA();
   loadDashboard();
   atualizarBadgePendentes();
