@@ -1467,7 +1467,7 @@ async function loadDashboard() {
   const saud = h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
   document.getElementById('dash-greeting').textContent = `${saud} — ${new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'})}`;
 
-  const { data: trans } = await sb.from('transactions').select('*, categories(nome)').order('data_movimento',{ascending:false});
+  const { data: trans } = await sb.from('transactions').select('*, category:transactions_category_id_fkey(nome)').order('data_movimento',{ascending:false});
   const all = trans || [];
   const thisMes = all.filter(t=>t.data_movimento?.startsWith(mes));
 
@@ -1559,7 +1559,7 @@ async function loadExtrato() {
   const ultimoDia = new Date(anoExt, mesExt, 0).getDate();
   const dataFim = `${mes}-${String(ultimoDia).padStart(2,'0')}`;
 
-  const { data } = await sb.from('transactions').select('*, categories(nome)')
+  const { data } = await sb.from('transactions').select('*, category:transactions_category_id_fkey(nome)')
     .gte('data_movimento', mes+'-01').lte('data_movimento', dataFim)
     .order('data_movimento',{ascending:false});
 
@@ -1603,7 +1603,7 @@ async function loadExtrato() {
     <tr>
       <td>${fmtDate(t.data_movimento)}</td>
       <td style="font-weight:500">${t.descricao}</td>
-      <td><span class="badge b-gray">${t.categories?.nome||'—'}</span></td>
+      <td><span class="badge b-gray">${t.category?.nome||'—'}</span></td>
       <td>${t._agrupado 
         ? `<span class="badge b-green" style="font-size:10px">Distribuído em subcontas</span>`
         : t.subconta ? `<span class="badge ${subBadgeClass(t.subconta)}">${cfg[t.subconta]?.nome||t.subconta}</span>` : '—'}</td>
@@ -1814,7 +1814,7 @@ async function loadDRE() {
     label = `Ano ${ano}`;
   }
 
-  const { data } = await sb.from('transactions').select('*, categories(nome)')
+  const { data } = await sb.from('transactions').select('*, category:transactions_category_id_fkey(nome)')
     .gte('data_movimento', startDate).lte('data_movimento', endDate);
   const all = data || [];
 
@@ -1828,7 +1828,7 @@ async function loadDRE() {
   // Agrupar despesas por categoria
   const despByCat = {};
   despesas.forEach(t => {
-    const cat = t.categories?.nome || 'Outros';
+    const cat = t.category?.nome || 'Outros';
     despByCat[cat] = (despByCat[cat]||0) + Number(t.valor);
   });
 
@@ -1883,13 +1883,13 @@ async function loadDRE() {
 // RECEITAS / DESPESAS
 // ══════════════════════════════
 async function loadReceitas() {
-  const { data } = await sb.from('transactions').select('*, categories(nome)').eq('tipo','receita').order('data_movimento',{ascending:false});
+  const { data } = await sb.from('transactions').select('*, category:transactions_category_id_fkey(nome)').eq('tipo','receita').order('data_movimento',{ascending:false});
   const rows = data||[];
   document.getElementById('tb-receitas').innerHTML = rows.length ? rows.map(t=>`
     <tr>
       <td>${fmtDate(t.data_movimento)}</td>
       <td style="font-weight:500">${t.descricao}</td>
-      <td><span class="badge b-gray">${t.categories?.nome||'—'}</span></td>
+      <td><span class="badge b-gray">${t.category?.nome||'—'}</span></td>
       <td class="pos" style="font-weight:700">+${fmt(t.valor)}</td>
       <td><button class="btn btn-danger btn-xs" onclick="deletar('${t.id}');loadReceitas()">✕</button></td>
     </tr>`).join('') : '<tr><td colspan="5" style="text-align:center;color:var(--fog);padding:24px">Nenhuma receita</td></tr>';
@@ -1897,13 +1897,13 @@ async function loadReceitas() {
 
 async function loadDespesas() {
   const cfg = getSubConfig();
-  const { data } = await sb.from('transactions').select('*, categories(nome)').eq('tipo','despesa').order('data_movimento',{ascending:false});
+  const { data } = await sb.from('transactions').select('*, category:transactions_category_id_fkey(nome)').eq('tipo','despesa').order('data_movimento',{ascending:false});
   const rows = data||[];
   document.getElementById('tb-despesas').innerHTML = rows.length ? rows.map(t=>`
     <tr>
       <td>${fmtDate(t.data_movimento)}</td>
       <td style="font-weight:500">${t.descricao}</td>
-      <td><span class="badge b-gray">${t.categories?.nome||'—'}</span></td>
+      <td><span class="badge b-gray">${t.category?.nome||'—'}</span></td>
       <td>${t.subconta?`<span class="badge ${subBadgeClass(t.subconta)}">${cfg[t.subconta]?.nome||t.subconta}</span>`:'—'}</td>
       <td class="neg" style="font-weight:700">-${fmt(t.valor)}</td>
       <td><button class="btn btn-danger btn-xs" onclick="deletar('${t.id}');loadDespesas()">✕</button></td>
