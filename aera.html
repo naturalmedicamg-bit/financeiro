@@ -1441,21 +1441,102 @@ async function loadCats() {
 // ══════════════════════════════
 // DISTRIBUIÇÃO SUBCONTAS
 // ══════════════════════════════
-function distribuirNasSubcontas(valor) {
+function distribuirNasSubcontas(valor, saldosAtuais) {
+  // Distribuição sequencial por prioridade
+  // Cada subconta tem uma meta (% do valor). Enche na ordem até atingir a meta.
+  // saldosAtuais: {subconta: valorJaAcumulado} — opcional, para considerar o que já foi alocado
   const cfg = getSubConfig();
+  const ORDEM = ['impostos', 'operacional', 'prolabore', 'reserva', 'antecipacao'];
+  const keys = ORDEM.filter(k => cfg[k])
+    .concat(Object.keys(cfg).filter(k => !ORDEM.includes(k)));
+
   const dist = {};
-  let resto = valor;
-  const keys = Object.keys(cfg);
-  keys.forEach((k, i) => {
-    if (i === keys.length - 1) {
-      dist[k] = Math.round(resto * 100) / 100;
-    } else {
-      const v = Math.round(valor * (cfg[k].pct / 100) * 100) / 100;
-      dist[k] = v;
-      resto -= v;
-    }
-  });
+  keys.forEach(k => dist[k] = 0);
+
+  let restante = valor;
+
+  for (const k of keys) {
+    if (restante <= 0) break;
+    const meta = Math.round(valor * (cfg[k].pct / 100) * 100) / 100;
+    const jaAlocado = saldosAtuais?.[k] || 0;
+    const espaco = Math.max(0, meta - jaAlocado);
+    const alocar = Math.min(restante, espaco);
+    dist[k] = Math.round(alocar * 100) / 100;
+    restante = Math.round((restante - alocar) * 100) / 100;
+  }
+
+  // Se sobrou (todas metas atingidas), joga no último envelope
+  if (restante > 0) {
+    const ultimo = keys[keys.length - 1];
+    dist[ultimo] = Math.round((dist[ultimo] + restante) * 100) / 100;
+  }
+
   return dist;
+}
+
+async function redistribuirReceitasMes(mes) {
+  // mes = 'YYYY-MM'
+  const [ano, m] = mes.split('-');
+  const inicio = `${ano}-${m}-01`;
+  const fim = `${ano}-${m}-${new Date(ano, m, 0).getDate()}`;
+
+  // Buscar todas as receitas do mês agrupadas por descrição+data (receitas originais)
+  const { data: receitas } = await sb.from('transactions')
+    .select('id, descricao, data_movimento, category_id, observacao')
+    .eq('tipo', 'receita')
+    .eq('user_id', USER.id)
+    .gte('data_movimento', inicio)
+    .lte('data_movimento', fim)
+    .order('data_movimento', {ascending: true});
+
+  if (!receitas?.length) return;
+
+  // Agrupar por descricao+data para obter receitas únicas
+  const grupos = {};
+  for (const t of receitas) {
+    const chave = `${t.descricao}||${t.data_movimento}`;
+    if (!grupos[chave]) grupos[chave] = { ...t, total: 0, ids: [] };
+    grupos[chave].total += Number(t.valor || 0);
+    grupos[chave].ids.push(t.id);
+  }
+
+  // Apagar todos os registros de receita do mês
+  await sb.from('transactions')
+    .delete()
+    .eq('tipo', 'receita')
+    .eq('user_id', USER.id)
+    .gte('data_movimento', inicio)
+    .lte('data_movimento', fim);
+
+  // Relançar com distribuição sequencial
+  // Acumula saldos à medida que distribui cada receita
+  const saldosAcumulados = {};
+  const cfg = getSubConfig();
+  Object.keys(cfg).forEach(k => saldosAcumulados[k] = 0);
+
+  for (const chave of Object.keys(grupos)) {
+    const g = grupos[chave];
+    const dist = distribuirNasSubcontas(g.total, saldosAcumulados);
+    for (const [sub, val] of Object.entries(dist)) {
+      if (val <= 0) continue;
+      saldosAcumulados[sub] = (saldosAcumulados[sub] || 0) + val;
+      await sb.from('transactions').insert({
+        user_id: USER.id,
+        tipo: 'receita',
+        descricao: g.descricao,
+        valor: val,
+        data_movimento: g.data_movimento,
+        category_id: g.category_id || null,
+        subconta: sub,
+        origem: 'redistribuido',
+        observacao: g.observacao || null
+      });
+    }
+  }
+  toast('✅ Receitas redistribuídas com prioridade!');
+  loadDashboard();
+  loadExtrato?.();
+  loadEnvelopes?.();
 }
 
 // ══════════════════════════════
