@@ -2918,14 +2918,18 @@ async function loadEnvelopes() {
     .gte('data_movimento', `${ano}-${String(m).padStart(2,'0')}-01`)
     .lte('data_movimento', `${ano}-${String(m).padStart(2,'0')}-${String(ultimoDiaEnv).padStart(2,'0')}`);
 
-  // Calcular saldo por subconta
-  const saldos = {};
-  Object.keys(cfg).forEach(k => saldos[k] = 0);
+  // Calcular receitas e despesas por subconta separadamente
+  const receitasSub = {}, despesasSub = {};
+  Object.keys(cfg).forEach(k => { receitasSub[k] = 0; despesasSub[k] = 0; });
   (trans||[]).forEach(t => {
-    if (t.subconta && saldos[t.subconta] !== undefined) {
-      saldos[t.subconta] += t.tipo === 'receita' ? Number(t.valor) : -Number(t.valor);
+    if (t.subconta && receitasSub[t.subconta] !== undefined) {
+      if (t.tipo === 'receita') receitasSub[t.subconta] += Number(t.valor);
+      else despesasSub[t.subconta] += Number(t.valor);
     }
   });
+  // Saldo líquido = receitas - despesas por subconta
+  const saldos = {};
+  Object.keys(cfg).forEach(k => saldos[k] = receitasSub[k] - despesasSub[k]);
 
   // Mapear metas
   const metasMap = {};
@@ -2953,8 +2957,14 @@ async function loadEnvelopes() {
     .map(k => [k, cfg[k]])
     .concat(Object.entries(cfg).filter(([k]) => !ORDEM.includes(k)));
   
+  // Calcular total de receitas do mês para usar como base de meta automática
+  const totalReceitas = (trans||[]).filter(t=>t.tipo==='receita').reduce((s,t)=>s+Number(t.valor),0);
+
   rodas.innerHTML = subcontas.map(([key, sub]) => {
-    const meta = metasMap[key]?.meta_valor || metasCustos[key] || 0;
+    const metaManual = metasMap[key]?.meta_valor || metasCustos[key] || 0;
+    // Meta automática = % configurado × total de receitas do mês
+    const metaAuto = totalReceitas > 0 ? Math.round(totalReceitas * (sub.pct / 100) * 100) / 100 : 0;
+    const meta = metaManual > 0 ? metaManual : metaAuto;
     const acumulado = metasMap[key]?.acumulado_anterior || 0;
     const saldo = Math.max(0, saldos[key] || 0);
     const total = saldo + acumulado;
@@ -2990,15 +3000,16 @@ async function loadEnvelopes() {
 
         <div style="font-size:18px;margin-bottom:4px">${sub.icon}</div>
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--fog);margin-bottom:6px">${sub.nome}</div>
-        <div style="font-size:18px;font-weight:700;color:${cor}">${fmt(total)}</div>
-        ${meta > 0 ? `<div style="font-size:11px;color:var(--fog);margin-top:3px">meta: ${fmt(meta)}</div>` : `<div style="font-size:11px;color:var(--gold);margin-top:3px">clique p/ definir meta</div>`}
+        <div style="font-size:18px;font-weight:700;color:${cor}">${fmt(Math.max(0,total))}</div>
+        ${despesasSub[key] > 0 ? `<div style="font-size:11px;color:var(--red);margin-top:2px">-${fmt(despesasSub[key])} gastos</div>` : ''}
+        <div style="font-size:11px;color:var(--fog);margin-top:3px">${metaManual > 0 ? 'meta: ' : 'alvo: '}${fmt(meta)}</div>
         ${acumulado > 0 ? `<div style="font-size:10px;color:var(--emerald);margin-top:2px">+ ${fmt(acumulado)} acumulado</div>` : ''}
         ${bateu ? `<div style="font-size:10px;color:var(--emerald);margin-top:4px;font-weight:700">🎯 Excesso → próxima</div>` : ''}
       </div>`;
   }).join('');
 
   // Resumo inteligente
-  const totalMeta = Object.values(metasCustos).reduce((s,v)=>s+v,0) || Object.values(metasMap).reduce((s,m)=>s+m.meta_valor,0);
+  const totalMeta = totalReceitas > 0 ? totalReceitas : (Object.values(metasCustos).reduce((s,v)=>s+v,0) || Object.values(metasMap).reduce((s,m)=>s+(m.meta_valor||0),0));
   const totalSaldo = Object.values(saldos).reduce((s,v)=>s+Math.max(0,v),0);
   const subsBatidas = subcontas.filter(([k])=>{
     const meta = metasMap[k]?.meta_valor || metasCustos[k] || 0;
