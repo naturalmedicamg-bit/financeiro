@@ -645,17 +645,31 @@ tr:hover td { background: rgba(184,151,58,0.03); }
 
     <!-- DASHBOARD -->
     <div class="page active" id="page-dashboard">
-      <div class="page-header">
+      <div class="page-header" style="flex-wrap:wrap;gap:12px">
         <div>
           <div class="page-title">Visão Geral</div>
           <div class="page-sub" id="dash-greeting">Bem-vindo à plataforma AERA</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex:1;justify-content:center">
+          <button id="dash-tab-geral" onclick="setDashTab('geral')" 
+            style="padding:7px 18px;border-radius:20px;border:1.5px solid var(--gold-border);background:var(--gold-dim);color:var(--gold);font-size:13px;font-weight:600;cursor:pointer;transition:all 0.2s">
+            🏦 Geral
+          </button>
+          <button id="dash-tab-casa" onclick="setDashTab('casa')" 
+            style="padding:7px 18px;border-radius:20px;border:1.5px solid var(--slate);background:transparent;color:var(--fog);font-size:13px;font-weight:600;cursor:pointer;transition:all 0.2s">
+            🏠 Casa
+          </button>
+          <button id="dash-tab-clinica" onclick="setDashTab('clinica')" 
+            style="padding:7px 18px;border-radius:20px;border:1.5px solid var(--slate);background:transparent;color:var(--fog);font-size:13px;font-weight:600;cursor:pointer;transition:all 0.2s">
+            🏥 Clínica
+          </button>
         </div>
         <button class="btn btn-outline btn-sm" onclick="go('ia')">+ Importar Extrato</button>
       </div>
 
       <!-- Saldo Hero -->
       <div class="saldo-hero">
-        <div class="saldo-label">Saldo Total da Conta</div>
+        <div class="saldo-label" id="dash-saldo-label">Saldo Total da Conta</div>
         <div class="saldo-value">R$ <strong id="dash-saldo">0,00</strong></div>
         <div class="saldo-meta">
           <div class="saldo-meta-item">
@@ -1542,14 +1556,38 @@ async function redistribuirReceitasMes(mes) {
 // ══════════════════════════════
 // DASHBOARD
 // ══════════════════════════════
+window._dashTab = 'geral';
+
+function setDashTab(tab) {
+  window._dashTab = tab;
+  const tabs = { geral: '🏦 Geral', casa: '🏠 Casa', clinica: '🏥 Clínica' };
+  ['geral','casa','clinica'].forEach(t => {
+    const btn = document.getElementById(`dash-tab-${t}`);
+    if (!btn) return;
+    const active = t === tab;
+    btn.style.background = active ? 'var(--gold-dim)' : 'transparent';
+    btn.style.color = active ? 'var(--gold)' : 'var(--fog)';
+    btn.style.borderColor = active ? 'var(--gold-border)' : 'var(--slate)';
+  });
+  loadDashboard();
+}
+
 async function loadDashboard() {
+  const tab = window._dashTab || 'geral';
   const mes = mesAtual();
   const h = new Date().getHours();
   const saud = h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
   document.getElementById('dash-greeting').textContent = `${saud} — ${new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'})}`;
 
   const { data: trans } = await sb.from('transactions').select('*, category:transactions_category_id_fkey(nome)').order('data_movimento',{ascending:false});
-  const all = trans || [];
+  const allRaw = trans || [];
+  // Filter by tab
+  const tabLabels = { geral: 'Saldo Total da Conta', casa: 'Saldo — Casa', clinica: 'Saldo — Clínica' };
+  const lbl = document.getElementById('dash-saldo-label');
+  if (lbl) lbl.textContent = tabLabels[tab] || 'Saldo Total da Conta';
+  const all = tab === 'geral' ? allRaw
+    : tab === 'casa' ? allRaw.filter(t => t.tipo === 'despesa' ? t.subconta === 'prolabore' : true)
+    : allRaw.filter(t => t.tipo === 'despesa' ? t.subconta !== 'prolabore' : true);
   const thisMes = all.filter(t=>t.data_movimento?.startsWith(mes));
 
   const entradas = thisMes.filter(t=>t.tipo==='receita').reduce((s,t)=>s+Number(t.valor),0);
