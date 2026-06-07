@@ -603,8 +603,7 @@ tr:hover td { background: rgba(184,151,58,0.03); }
         <div class="nav-group-label">Principal</div>
         <div class="nav-item active" onclick="go('dashboard')"><span class="icon">◈</span> Dashboard</div>
         <div class="nav-item" onclick="go('extrato')"><span class="icon">≡</span> Extrato</div>
-        <div class="nav-item" onclick="go('subcontas')"><span class="icon">⊡</span> Subcontas</div>
-        <div class="nav-item" onclick="go('envelopes')"><span class="icon">◑</span> Envelopes</div>
+        <div class="nav-item" onclick="go('envelopes')"><span class="icon">◑</span> Subcontas</div>
       </div>
 
       <div class="nav-group">
@@ -756,24 +755,12 @@ tr:hover td { background: rgba(184,151,58,0.03); }
     </div>
 
     <!-- SUBCONTAS -->
-    <div class="page" id="page-subcontas">
-      <div class="page-header">
-        <div>
-          <div class="page-title">Subcontas Inteligentes</div>
-          <div class="page-sub">O dinheiro se organiza automaticamente a cada entrada</div>
-        </div>
-        <button class="btn btn-outline btn-sm" onclick="openModal('modal-config-subcontas')">⚙ Configurar %</button>
-      </div>
-
-      <div id="subcontas-detalhes"></div>
-    </div>
-
     <!-- ENVELOPES -->
     <div class="page" id="page-envelopes">
       <div class="page-header">
         <div>
-          <div class="page-title">Envelopes Financeiros</div>
-          <div class="page-sub">Metas mensais por subconta — o dinheiro sabe para onde ir</div>
+          <div class="page-title">Subcontas Inteligentes</div>
+          <div class="page-sub">O dinheiro se organiza automaticamente a cada entrada</div>
         </div>
         <div style="display:flex;gap:8px;align-items:center">
           <input type="month" id="env-mes" class="form-control" style="width:auto" onchange="loadEnvelopes()">
@@ -1431,7 +1418,6 @@ function go(page) {
   const loaders = {
     dashboard: loadDashboard,
     extrato: loadExtrato,
-    subcontas: loadSubcontas,
     envelopes: loadEnvelopes,
     dre: loadDRE,
     receitas: loadReceitas,
