@@ -789,10 +789,14 @@ tr:hover td { background: rgba(184,151,58,0.03); }
 
     <!-- DRE -->
     <div class="page" id="page-dre">
-      <div class="page-header">
+      <div class="page-header" style="flex-wrap:wrap;gap:12px">
         <div>
           <div class="page-title">DRE — Demonstrativo de Resultado</div>
           <div class="page-sub">Consultório · atualizado em tempo real</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex:1;justify-content:center">
+          <button id="dre-tab-clinica" onclick="setDRETab('clinica')" style="padding:7px 18px;border-radius:20px;border:1.5px solid var(--gold-border);background:var(--gold-dim);color:var(--gold);font-size:13px;font-weight:600;cursor:pointer">🏥 Clínica</button>
+          <button id="dre-tab-pessoal" onclick="setDRETab('pessoal')" style="padding:7px 18px;border-radius:20px;border:1.5px solid var(--slate);background:transparent;color:var(--fog);font-size:13px;font-weight:600;cursor:pointer">🏠 Pessoal</button>
         </div>
         <div style="display:flex;gap:8px">
           <select id="dre-periodo" class="form-control" style="width:auto;padding:8px 12px;font-size:13px" onchange="loadDRE()">
@@ -1894,7 +1898,23 @@ async function loadSubcontas() {
 // ══════════════════════════════
 // DRE
 // ══════════════════════════════
+window._dreTab = 'clinica';
+
+function setDRETab(tab) {
+  window._dreTab = tab;
+  ['clinica','pessoal'].forEach(t => {
+    const btn = document.getElementById(`dre-tab-${t}`);
+    if (!btn) return;
+    const active = t === tab;
+    btn.style.background = active ? 'var(--gold-dim)' : 'transparent';
+    btn.style.color = active ? 'var(--gold)' : 'var(--fog)';
+    btn.style.borderColor = active ? 'var(--gold-border)' : 'var(--slate)';
+  });
+  loadDRE();
+}
+
 async function loadDRE() {
+  const tab = window._dreTab || 'clinica';
   const periodo = document.getElementById('dre-periodo').value;
   const mes = document.getElementById('dre-mes').value || mesAtual();
   document.getElementById('dre-mes').value = mes;
@@ -1923,65 +1943,113 @@ async function loadDRE() {
     .gte('data_movimento', startDate).lte('data_movimento', endDate);
   const all = data || [];
 
-  const receitas = all.filter(t=>t.tipo==='receita');
-  const despesas = all.filter(t=>t.tipo==='despesa');
-  const totalReceitas = receitas.reduce((s,t)=>s+Number(t.valor),0);
-  const totalDespesas = despesas.reduce((s,t)=>s+Number(t.valor),0);
-  const resultado = totalReceitas - totalDespesas;
-  const margem = totalReceitas > 0 ? (resultado/totalReceitas*100).toFixed(1) : 0;
-
-  // Agrupar despesas por categoria
-  const despByCat = {};
-  despesas.forEach(t => {
-    const cat = t.category?.nome || 'Outros';
-    despByCat[cat] = (despByCat[cat]||0) + Number(t.valor);
-  });
-
-  // Agrupar por subconta
   const cfg = getSubConfig();
-  const recBySub = {};
-  receitas.forEach(t => {
-    if(t.subconta) recBySub[t.subconta] = (recBySub[t.subconta]||0) + Number(t.valor);
-  });
 
-  document.getElementById('dre-content').innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px">
-      <div>
-        <div style="font-size:18px;font-weight:700">DRE — ${label}</div>
-        <div style="font-size:12px;color:var(--fog);margin-top:2px">Margem líquida: <strong style="color:${resultado>=0?'var(--emerald)':'var(--red)'}">${margem}%</strong></div>
+  if (tab === 'clinica') {
+    // DRE Clínica: receitas + despesas da clínica (subcontas != prolabore)
+    const receitas = all.filter(t => t.tipo === 'receita');
+    const despesas = all.filter(t => t.tipo === 'despesa' && t.subconta !== 'prolabore');
+    const totalReceitas = receitas.reduce((s,t)=>s+Number(t.valor),0);
+    const totalDespesas = despesas.reduce((s,t)=>s+Number(t.valor),0);
+    const resultado = totalReceitas - totalDespesas;
+    const margem = totalReceitas > 0 ? (resultado/totalReceitas*100).toFixed(1) : 0;
+
+    const despByCat = {};
+    despesas.forEach(t => {
+      const cat = t.category?.nome || 'Outros';
+      despByCat[cat] = (despByCat[cat]||0) + Number(t.valor);
+    });
+
+    const recBySub = {};
+    receitas.forEach(t => {
+      if(t.subconta) recBySub[t.subconta] = (recBySub[t.subconta]||0) + Number(t.valor);
+    });
+
+    document.getElementById('dre-content').innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px">
+        <div>
+          <div style="font-size:18px;font-weight:700">🏥 DRE Clínica — ${label}</div>
+          <div style="font-size:12px;color:var(--fog);margin-top:2px">Margem líquida: <strong style="color:${resultado>=0?'var(--emerald)':'var(--red)'}">${margem}%</strong></div>
+        </div>
       </div>
-    </div>
 
-    <div class="dre-section">
-      <div class="dre-section-title">1. RECEITA BRUTA</div>
-      ${receitas.length ? `<div class="dre-row"><div class="dre-label indent">Receitas do Consultório</div><div class="dre-val pos">${fmt(totalReceitas)}</div></div>` : ''}
-      <div class="dre-total"><div class="label">Total Receitas</div><div class="val pos">${fmt(totalReceitas)}</div></div>
-    </div>
-
-    <div class="dre-section" style="margin-top:16px">
-      <div class="dre-section-title">2. DESPESAS OPERACIONAIS</div>
-      ${Object.entries(despByCat).map(([cat,val])=>`
-        <div class="dre-row">
-          <div class="dre-label indent">${cat}</div>
-          <div class="dre-val neg">- ${fmt(val)}</div>
-        </div>`).join('') || '<div class="dre-row"><div class="dre-label" style="color:var(--fog)">Nenhuma despesa</div><div></div></div>'}
-      <div class="dre-total"><div class="label">Total Despesas</div><div class="val neg">- ${fmt(totalDespesas)}</div></div>
-    </div>
-
-    <div class="dre-section" style="margin-top:16px">
-      <div class="dre-section-title">3. DISTRIBUIÇÃO POR SUBCONTA</div>
-      ${Object.entries(cfg).map(([key,sub])=>{
-        const v = recBySub[key]||0;
-        return `<div class="dre-row"><div class="dre-label indent">${sub.icon} ${sub.nome} (${sub.pct}%)</div><div class="dre-val gold-text">${fmt(v)}</div></div>`;
-      }).join('')}
-    </div>
-
-    <div style="margin-top:20px">
-      <div class="dre-total" style="background:${resultado>=0?'rgba(0,168,120,0.1)':'rgba(224,82,82,0.1)'};border-color:${resultado>=0?'var(--emerald)':'var(--red)'}">
-        <div class="label" style="color:${resultado>=0?'var(--emerald)':'var(--red)'}">RESULTADO LÍQUIDO</div>
-        <div class="val" style="color:${resultado>=0?'var(--emerald)':'var(--red)'};font-size:24px">${resultado>=0?'+':''}${fmt(resultado)}</div>
+      <div class="dre-section">
+        <div class="dre-section-title">1. RECEITA BRUTA</div>
+        ${receitas.length ? `<div class="dre-row"><div class="dre-label indent">Receitas do Consultório</div><div class="dre-val pos">${fmt(totalReceitas)}</div></div>` : ''}
+        <div class="dre-total"><div class="label">Total Receitas</div><div class="val pos">${fmt(totalReceitas)}</div></div>
       </div>
-    </div>`;
+
+      <div class="dre-section" style="margin-top:16px">
+        <div class="dre-section-title">2. DESPESAS DA CLÍNICA</div>
+        ${Object.entries(despByCat).map(([cat,val])=>`
+          <div class="dre-row">
+            <div class="dre-label indent">${cat}</div>
+            <div class="dre-val neg">- ${fmt(val)}</div>
+          </div>`).join('') || '<div class="dre-row"><div class="dre-label" style="color:var(--fog)">Nenhuma despesa</div><div></div></div>'}
+        <div class="dre-total"><div class="label">Total Despesas</div><div class="val neg">- ${fmt(totalDespesas)}</div></div>
+      </div>
+
+      <div class="dre-section" style="margin-top:16px">
+        <div class="dre-section-title">3. DISTRIBUIÇÃO POR SUBCONTA</div>
+        ${Object.entries(cfg).map(([key,sub])=>{
+          const v = recBySub[key]||0;
+          return `<div class="dre-row"><div class="dre-label indent">${sub.icon} ${sub.nome} (${sub.pct}%)</div><div class="dre-val gold-text">${fmt(v)}</div></div>`;
+        }).join('')}
+      </div>
+
+      <div style="margin-top:20px">
+        <div class="dre-total" style="background:${resultado>=0?'rgba(0,168,120,0.1)':'rgba(224,82,82,0.1)'};border-color:${resultado>=0?'var(--emerald)':'var(--red)'}">
+          <div class="label" style="color:${resultado>=0?'var(--emerald)':'var(--red)'}">RESULTADO LÍQUIDO</div>
+          <div class="val" style="color:${resultado>=0?'var(--emerald)':'var(--red)'};font-size:24px">${resultado>=0?'+':''}${fmt(resultado)}</div>
+        </div>
+      </div>`;
+
+  } else {
+    // DRE Pessoal: pró-labore como "receita disponível" e despesas pessoais (prolabore)
+    const prolabore = all.filter(t => t.tipo === 'receita' && t.subconta === 'prolabore');
+    const despesas = all.filter(t => t.tipo === 'despesa' && t.subconta === 'prolabore');
+    const totalProlabore = prolabore.reduce((s,t)=>s+Number(t.valor),0);
+    const totalDespesas = despesas.reduce((s,t)=>s+Number(t.valor),0);
+    const saldoPessoal = totalProlabore - totalDespesas;
+    const margem = totalProlabore > 0 ? (saldoPessoal/totalProlabore*100).toFixed(1) : 0;
+
+    const despByCat = {};
+    despesas.forEach(t => {
+      const cat = t.category?.nome || 'Outros';
+      despByCat[cat] = (despByCat[cat]||0) + Number(t.valor);
+    });
+
+    document.getElementById('dre-content').innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px">
+        <div>
+          <div style="font-size:18px;font-weight:700">🏠 DRE Pessoal — ${label}</div>
+          <div style="font-size:12px;color:var(--fog);margin-top:2px">Saldo disponível: <strong style="color:${saldoPessoal>=0?'var(--emerald)':'var(--red)'}">${margem}%</strong></div>
+        </div>
+      </div>
+
+      <div class="dre-section">
+        <div class="dre-section-title">1. PRÓ-LABORE DISPONÍVEL</div>
+        <div class="dre-row"><div class="dre-label indent">Pró-labore do período</div><div class="dre-val pos">${fmt(totalProlabore)}</div></div>
+        <div class="dre-total"><div class="label">Total Disponível</div><div class="val pos">${fmt(totalProlabore)}</div></div>
+      </div>
+
+      <div class="dre-section" style="margin-top:16px">
+        <div class="dre-section-title">2. GASTOS PESSOAIS</div>
+        ${Object.entries(despByCat).map(([cat,val])=>`
+          <div class="dre-row">
+            <div class="dre-label indent">${cat}</div>
+            <div class="dre-val neg">- ${fmt(val)}</div>
+          </div>`).join('') || '<div class="dre-row"><div class="dre-label" style="color:var(--fog)">Nenhum gasto pessoal</div><div></div></div>'}
+        <div class="dre-total"><div class="label">Total Gastos</div><div class="val neg">- ${fmt(totalDespesas)}</div></div>
+      </div>
+
+      <div style="margin-top:20px">
+        <div class="dre-total" style="background:${saldoPessoal>=0?'rgba(0,168,120,0.1)':'rgba(224,82,82,0.1)'};border-color:${saldoPessoal>=0?'var(--emerald)':'var(--red)'}">
+          <div class="label" style="color:${saldoPessoal>=0?'var(--emerald)':'var(--red)'}">SALDO PESSOAL</div>
+          <div class="val" style="color:${saldoPessoal>=0?'var(--emerald)':'var(--red)'};font-size:24px">${saldoPessoal>=0?'+':''}${fmt(saldoPessoal)}</div>
+        </div>
+      </div>`;
+  }
 }
 
 // ══════════════════════════════
