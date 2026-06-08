@@ -609,6 +609,7 @@ tr:hover td { background: rgba(184,151,58,0.03); }
       <div class="nav-group">
         <div class="nav-group-label">Consultório</div>
         <div class="nav-item" onclick="go('dre')"><span class="icon">📊</span> DRE</div>
+        <div class="nav-item" onclick="go('fluxo')"><span class="icon">〜</span> Fluxo de Caixa</div>
         <div class="nav-item" onclick="go('receitas')"><span class="icon">↑</span> Receitas</div>
         <div class="nav-item" onclick="go('despesas')"><span class="icon">↓</span> Despesas</div>
       </div>
@@ -837,6 +838,50 @@ tr:hover td { background: rgba(184,151,58,0.03); }
           <table>
             <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Subconta</th><th>Valor</th><th></th></tr></thead>
             <tbody id="tb-despesas"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- FLUXO DE CAIXA -->
+    <div class="page" id="page-fluxo">
+      <div class="page-header" style="flex-wrap:wrap;gap:12px">
+        <div>
+          <div class="page-title">Fluxo de Caixa</div>
+          <div class="page-sub">Entradas e saídas dia a dia</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex:1;justify-content:center">
+          <button id="fluxo-tab-geral" onclick="setFluxoTab('geral')"
+            style="padding:7px 18px;border-radius:20px;border:1.5px solid var(--gold-border);background:var(--gold-dim);color:var(--gold);font-size:13px;font-weight:600;cursor:pointer">
+            🏦 Geral
+          </button>
+          <button id="fluxo-tab-clinica" onclick="setFluxoTab('clinica')"
+            style="padding:7px 18px;border-radius:20px;border:1.5px solid var(--slate);background:transparent;color:var(--fog);font-size:13px;font-weight:600;cursor:pointer">
+            🏥 Clínica
+          </button>
+          <button id="fluxo-tab-pessoal" onclick="setFluxoTab('pessoal')"
+            style="padding:7px 18px;border-radius:20px;border:1.5px solid var(--slate);background:transparent;color:var(--fog);font-size:13px;font-weight:600;cursor:pointer">
+            🏠 Pessoal
+          </button>
+        </div>
+        <input type="month" id="fluxo-mes" class="form-control" style="width:auto" onchange="loadFluxo()">
+      </div>
+
+      <!-- Resumo cards -->
+      <div class="grid g4" style="margin-bottom:20px" id="fluxo-resumo"></div>
+
+      <!-- Gráfico -->
+      <div class="card" style="margin-bottom:20px">
+        <canvas id="chart-fluxo" height="120"></canvas>
+      </div>
+
+      <!-- Tabela diária -->
+      <div class="card">
+        <div style="font-size:12px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:1px;margin-bottom:14px">Movimentação Diária</div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Dia</th><th>Entradas</th><th>Saídas</th><th>Saldo do Dia</th><th>Saldo Acumulado</th></tr></thead>
+            <tbody id="tb-fluxo"></tbody>
           </table>
         </div>
       </div>
@@ -1424,6 +1469,7 @@ function go(page) {
     extrato: loadExtrato,
     envelopes: loadEnvelopes,
     dre: loadDRE,
+    fluxo: loadFluxo,
     receitas: loadReceitas,
     despesas: loadDespesas,
     metas: loadMetas,
@@ -1896,6 +1942,129 @@ async function loadSubcontas() {
 }
 
 // ══════════════════════════════
+// FLUXO DE CAIXA
+window._fluxoTab = 'geral';
+
+function setFluxoTab(tab) {
+  window._fluxoTab = tab;
+  ['geral','clinica','pessoal'].forEach(t => {
+    const btn = document.getElementById(`fluxo-tab-${t}`);
+    if (!btn) return;
+    const active = t === tab;
+    btn.style.background = active ? 'var(--gold-dim)' : 'transparent';
+    btn.style.color = active ? 'var(--gold)' : 'var(--fog)';
+    btn.style.borderColor = active ? 'var(--gold-border)' : 'var(--slate)';
+  });
+  loadFluxo();
+}
+
+async function loadFluxo() {
+  const tab = window._fluxoTab || 'geral';
+  const mes = document.getElementById('fluxo-mes')?.value || mesAtual();
+  if (document.getElementById('fluxo-mes')) document.getElementById('fluxo-mes').value = mes;
+  const [ano, m] = mes.split('-').map(Number);
+  const ultimoDia = new Date(ano, m, 0).getDate();
+  const start = `${ano}-${String(m).padStart(2,'0')}-01`;
+  const end   = `${ano}-${String(m).padStart(2,'0')}-${String(ultimoDia).padStart(2,'0')}`;
+
+  const { data } = await sb.from('transactions')
+    .select('valor,tipo,subconta,data_movimento')
+    .eq('user_id', USER.id)
+    .gte('data_movimento', start)
+    .lte('data_movimento', end)
+    .order('data_movimento', {ascending: true});
+
+  const all = data || [];
+
+  // Filter by tab
+  const trans = tab === 'geral' ? all
+    : tab === 'clinica' ? all.filter(t => t.tipo === 'receita' || t.subconta !== 'prolabore')
+    : all.filter(t => t.tipo === 'receita' || t.subconta === 'prolabore');
+
+  // Build day-by-day map
+  const dias = {};
+  for (let d = 1; d <= ultimoDia; d++) {
+    const key = `${ano}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    dias[key] = { entradas: 0, saidas: 0 };
+  }
+  trans.forEach(t => {
+    if (!dias[t.data_movimento]) return;
+    if (t.tipo === 'receita') dias[t.data_movimento].entradas += Number(t.valor);
+    else dias[t.data_movimento].saidas += Number(t.valor);
+  });
+
+  const entries = Object.entries(dias);
+  let acumulado = 0;
+  const labels = [], entradas = [], saidas = [], saldos = [];
+  const rows = entries.map(([data, v]) => {
+    const saldoDia = v.entradas - v.saidas;
+    acumulado += saldoDia;
+    labels.push(data.slice(8)); // day number
+    entradas.push(v.entradas);
+    saidas.push(v.saidas);
+    saldos.push(acumulado);
+    return { data, ...v, saldoDia, acumulado };
+  });
+
+  // Resumo cards
+  const totalEnt = rows.reduce((s,r)=>s+r.entradas,0);
+  const totalSai = rows.reduce((s,r)=>s+r.saidas,0);
+  const saldoFinal = totalEnt - totalSai;
+  const menorSaldo = Math.min(...saldos);
+  document.getElementById('fluxo-resumo').innerHTML = `
+    <div class="card" style="text-align:center">
+      <div style="font-size:11px;color:var(--fog);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Entradas</div>
+      <div style="font-size:20px;font-weight:700;color:var(--emerald)">${fmt(totalEnt)}</div>
+    </div>
+    <div class="card" style="text-align:center">
+      <div style="font-size:11px;color:var(--fog);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Saídas</div>
+      <div style="font-size:20px;font-weight:700;color:var(--red)">${fmt(totalSai)}</div>
+    </div>
+    <div class="card" style="text-align:center">
+      <div style="font-size:11px;color:var(--fog);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Saldo do Mês</div>
+      <div style="font-size:20px;font-weight:700;color:${saldoFinal>=0?'var(--emerald)':'var(--red)'}">${saldoFinal>=0?'+':''}${fmt(saldoFinal)}</div>
+    </div>
+    <div class="card" style="text-align:center">
+      <div style="font-size:11px;color:var(--fog);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Menor Saldo</div>
+      <div style="font-size:20px;font-weight:700;color:${menorSaldo>=0?'var(--gold)':'var(--red)'}">${fmt(menorSaldo)}</div>
+    </div>`;
+
+  // Chart
+  const ctx = document.getElementById('chart-fluxo').getContext('2d');
+  if (window._chartFluxo) window._chartFluxo.destroy();
+  window._chartFluxo = new Chart(ctx, {
+    data: {
+      labels,
+      datasets: [
+        { type: 'bar', label: 'Entradas', data: entradas, backgroundColor: 'rgba(0,168,120,0.5)', borderColor: '#00A878', borderWidth: 1 },
+        { type: 'bar', label: 'Saídas', data: saidas, backgroundColor: 'rgba(224,82,82,0.5)', borderColor: '#E05252', borderWidth: 1 },
+        { type: 'line', label: 'Saldo Acumulado', data: saldos, borderColor: '#B8973A', backgroundColor: 'rgba(184,151,58,0.1)', tension: 0.3, pointRadius: 2, yAxisID: 'y1' }
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { labels: { color: '#8A9BB0', font: { size: 11 } } } },
+      scales: {
+        x: { ticks: { color: '#8A9BB0', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
+        y: { ticks: { color: '#8A9BB0', font: { size: 10 }, callback: v => 'R$' + (v/1000).toFixed(0) + 'k' }, grid: { color: 'rgba(255,255,255,0.04)' } },
+        y1: { position: 'right', ticks: { color: '#B8973A', font: { size: 10 }, callback: v => 'R$' + (v/1000).toFixed(0) + 'k' }, grid: { display: false } }
+      }
+    }
+  });
+
+  // Table
+  document.getElementById('tb-fluxo').innerHTML = rows
+    .filter(r => r.entradas > 0 || r.saidas > 0)
+    .map(r => `
+      <tr>
+        <td>${fmtDate(r.data)}</td>
+        <td class="pos" style="font-weight:600">${r.entradas > 0 ? '+'+fmt(r.entradas) : '—'}</td>
+        <td class="neg" style="font-weight:600">${r.saidas > 0 ? '-'+fmt(r.saidas) : '—'}</td>
+        <td style="font-weight:600;color:${r.saldoDia>=0?'var(--emerald)':'var(--red)'}">${r.saldoDia>=0?'+':''}${fmt(r.saldoDia)}</td>
+        <td style="font-weight:700;color:${r.acumulado>=0?'var(--gold)':'var(--red)'}">${fmt(r.acumulado)}</td>
+      </tr>`).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--fog);padding:24px">Nenhuma movimentação</td></tr>';
+}
+
 // DRE
 // ══════════════════════════════
 window._dreTab = 'clinica';
